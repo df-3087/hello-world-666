@@ -28,3 +28,24 @@ Scope is intentionally narrow: **one airport** and **one flight number**, config
    ```
 
 **Security:** `.env` and [`.streamlit/secrets.toml`](https://docs.streamlit.io/develop/concepts/connections/secrets-management) are listed in [`.gitignore`](.gitignore). Only commit [`.env.example`](.env.example), never your real token.
+
+## Next.js website (Phase 2 scaffold)
+
+A production-style web scaffold now exists in [`web/`](web/) using Next.js (App Router) with server API routes:
+
+- `GET /api/airport` — airport arrivals/departures and 24h series
+- `GET /api/flight` — recent leg history for one flight number
+
+### Prerequisite
+
+Install Node.js 20+ (includes `npm` and `npx`).
+
+### Run locally
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+The web app reads `FR24_API_TOKEN`, `DEMO_AIRPORT`, `DEMO_FLIGHT`, and `DEMO_LOOKBACK_DAYS` from your project `.env`.

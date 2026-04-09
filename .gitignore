@@ -31,3 +31,8 @@ build/
 # Local scratch (SDK inspection, etc.)
 .tmp_fr24/
 .tmp_fr24_extract/
+
+# Next.js / Node
+web/node_modules/
+web/.next/
+web/out/
