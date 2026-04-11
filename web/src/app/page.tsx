@@ -47,12 +47,12 @@ function toLocalTime(utcStr: string | null | undefined, tz: string): string {
   });
 }
 
-function taxiMinutes(landedUtc: string | null | undefined, gateArrivalUtc: string | null | undefined): string {
-  if (!landedUtc || !gateArrivalUtc) return "--";
-  const landed = new Date(landedUtc.endsWith("Z") ? landedUtc : `${landedUtc}Z`);
-  const gateArrival = new Date(gateArrivalUtc.endsWith("Z") ? gateArrivalUtc : `${gateArrivalUtc}Z`);
-  if (isNaN(landed.getTime()) || isNaN(gateArrival.getTime())) return "--";
-  const mins = Math.round((gateArrival.getTime() - landed.getTime()) / 60000);
+function elapsedMinutes(startUtc: string | null | undefined, endUtc: string | null | undefined): string {
+  if (!startUtc || !endUtc) return "--";
+  const start = new Date(startUtc.endsWith("Z") ? startUtc : `${startUtc}Z`);
+  const end = new Date(endUtc.endsWith("Z") ? endUtc : `${endUtc}Z`);
+  if (isNaN(start.getTime()) || isNaN(end.getTime())) return "--";
+  const mins = Math.round((end.getTime() - start.getTime()) / 60000);
   if (mins < 0 || mins > 120) return "--";
   return `${mins} min`;
 }
@@ -193,9 +193,9 @@ export default function HomePage() {
                 {(airportData?.arrivals ?? []).map((r, i) => (
                   <tr key={`${r.fr24_id || "a"}-${i}`}>
                     <td>{r.flight || r.callsign || "--"}</td>
-                    <td>{r.origin_icao || "--"}</td>
+                    <td>{r.orig_icao || "--"}</td>
                     <td>{toLocalTime(r.datetime_landed, airportData?.airport.timezone ?? "UTC")}</td>
-                    <td>{taxiMinutes(r.datetime_landed, r.datetime_gate_arrival)}</td>
+                    <td>{elapsedMinutes(r.datetime_landed, r.datetime_gate_arrival)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -211,15 +211,17 @@ export default function HomePage() {
                 <tr>
                   <th>Flight</th>
                   <th>To</th>
-                  <th>Takeoff (UTC)</th>
+                  <th>Takeoff (local)</th>
+                  <th>Taxi-out</th>
                 </tr>
               </thead>
               <tbody>
                 {(airportData?.departures ?? []).map((r, i) => (
                   <tr key={`${r.fr24_id || "d"}-${i}`}>
                     <td>{r.flight || r.callsign || "--"}</td>
-                    <td>{r.destination_icao || "--"}</td>
-                    <td>{r.datetime_takeoff || "--"}</td>
+                    <td>{r.dest_icao || "--"}</td>
+                    <td>{toLocalTime(r.datetime_takeoff, airportData?.airport.timezone ?? "UTC")}</td>
+                    <td>{elapsedMinutes(r.datetime_gate_departure, r.datetime_takeoff)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -245,7 +247,7 @@ export default function HomePage() {
             {(flightData?.legs ?? []).map((r, i) => (
               <tr key={`${r.fr24_id || "f"}-${i}`}>
                 <td>{r.flight || r.callsign || "--"}</td>
-                <td>{`${r.origin_icao || "--"} -> ${r.destination_icao || "--"}`}</td>
+                <td>{`${r.orig_icao || "--"} -> ${r.dest_icao || "--"}`}</td>
                 <td>{r.datetime_takeoff || "--"}</td>
                 <td>{r.datetime_landed || "--"}</td>
                 <td>{r.type || "--"}</td>

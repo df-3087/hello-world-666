@@ -8,8 +8,8 @@ type FlightRow = {
   fr24_id?: string;
   flight?: string;
   callsign?: string;
-  origin_icao?: string;
-  destination_icao?: string;
+  orig_icao?: string;
+  dest_icao?: string;
   datetime_takeoff?: string;
   datetime_landed?: string;
   type?: string;
