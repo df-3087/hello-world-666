@@ -25,6 +25,42 @@ body {
   padding: 24px;
 }
 
+.gate {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.gate-card {
+  width: min(100%, 420px);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.08);
+}
+
+.gate-kicker {
+  margin: 0 0 8px;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.gate-form {
+  display: grid;
+  gap: 12px;
+}
+
+.gate-error {
+  margin: 12px 0 0;
+  color: #b42318;
+  font-size: 14px;
+}
+
 .title {
   margin: 0 0 6px;
   font-size: 28px;
