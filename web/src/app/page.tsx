@@ -27,26 +27,40 @@ type FlightPayload = {
   error?: string;
 };
 
+function extractTime(label: string): string {
+  const match = label.match(/\d{2}:\d{2}/);
+  return match ? match[0] : label;
+}
+
 function SparkBars({ points }: { points: SeriesPoint[] }) {
   const max = Math.max(1, ...points.map((p) => p.value));
   return (
-    <div style={{ display: "grid", gridTemplateColumns: `repeat(${points.length}, 1fr)`, gap: 4, marginTop: 10 }}>
-      {points.map((p) => (
-        <div key={p.label} title={`${p.label}: ${p.value}`}>
-          <div
-            style={{
-              height: 70,
-              display: "flex",
-              alignItems: "flex-end",
-              justifyContent: "center",
-              borderRadius: 6,
-              background: "#eef3ff",
-            }}
-          >
-            <div style={{ width: "70%", height: `${(p.value / max) * 100}%`, background: "#0b63f6", borderRadius: 6 }} />
+    <div style={{ marginTop: 10 }}>
+      <div style={{ display: "grid", gridTemplateColumns: `repeat(${points.length}, 1fr)`, gap: 4 }}>
+        {points.map((p) => (
+          <div key={p.label} title={`${p.label}: ${p.value}`}>
+            <div
+              style={{
+                height: 70,
+                display: "flex",
+                alignItems: "flex-end",
+                justifyContent: "center",
+                borderRadius: 6,
+                background: "#eef3ff",
+              }}
+            >
+              <div style={{ width: "70%", height: `${(p.value / max) * 100}%`, background: "#0b63f6", borderRadius: 6 }} />
+            </div>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: `repeat(${points.length}, 1fr)`, gap: 4, marginTop: 4 }}>
+        {points.map((p, i) => (
+          <div key={p.label} style={{ textAlign: "center", fontSize: 10, color: "#6b7280", lineHeight: "14px" }}>
+            {i % 3 === 0 ? extractTime(p.label) : ""}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

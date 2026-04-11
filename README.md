@@ -26,6 +26,7 @@ npm run dev
 Copy [`.env.example`](.env.example) to `.env` in the project root and set:
 
 - `FR24_API_TOKEN` (required)
+- `SITE_PASSWORD` (optional; if set, visitors must enter this shared password first)
 - `DEMO_AIRPORT` (optional)
 - `DEMO_FLIGHT` (optional)
 - `DEMO_LOOKBACK_DAYS` (optional)
@@ -38,6 +39,7 @@ The web app reads these values from your local environment. Only commit [`.env.e
 2. In Vercel, import the repo and set the project root directory to `web`.
 3. Add these environment variables in Vercel Project Settings:
    - `FR24_API_TOKEN` (required)
+   - `SITE_PASSWORD` (optional)
    - `DEMO_AIRPORT` (optional)
    - `DEMO_FLIGHT` (optional)
    - `DEMO_LOOKBACK_DAYS` (optional)
