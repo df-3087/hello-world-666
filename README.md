@@ -1,37 +1,12 @@
 # hello-world-666
 
-Product and technical specification: [docs/FR24_AIR_TRAFFIC_BRD.md](docs/FR24_AIR_TRAFFIC_BRD.md) (Flightradar24 air traffic analytics — BRD and design, v1.3).
+Next.js website for Flightradar24-powered air traffic analytics.
 
-## Streamlit dashboard (demo)
+Product and technical specification: [docs/FR24_AIR_TRAFFIC_BRD.md](docs/FR24_AIR_TRAFFIC_BRD.md) (historical planning doc; parts still describe the retired MVP).
 
-Scope is intentionally narrow: **one airport** and **one flight number**, configured in a local `.env` file (not committed to Git).
+## Next.js website
 
-1. Create a virtual environment and install dependencies:
-
-   ```bash
-   python3 -m venv .venv
-   source .venv/bin/activate   # Windows: .venv\Scripts\activate
-   pip install -r requirements.txt
-   ```
-
-2. Copy [`.env.example`](.env.example) to **`.env`** in the project root and set:
-
-   - **`FR24_API_TOKEN`** — your Flightradar24 API token (required).
-   - **`DEMO_AIRPORT`** — IATA (3 letters) or ICAO (4 letters), e.g. `ARN` or `ESSA`.
-   - **`DEMO_FLIGHT`** — flight number as used by the API, e.g. `SK1415`.
-   - **`DEMO_LOOKBACK_DAYS`** — optional, 1–14 (default `7`).
-
-3. Run the app:
-
-   ```bash
-   streamlit run streamlit_app.py
-   ```
-
-**Security:** `.env` and [`.streamlit/secrets.toml`](https://docs.streamlit.io/develop/concepts/connections/secrets-management) are listed in [`.gitignore`](.gitignore). Only commit [`.env.example`](.env.example), never your real token.
-
-## Next.js website (Phase 2 scaffold)
-
-A production-style web scaffold now exists in [`web/`](web/) using Next.js (App Router) with server API routes:
+The app lives in [`web/`](web/) and uses Next.js (App Router) with server API routes:
 
 - `GET /api/airport` — airport arrivals/departures and 24h series
 - `GET /api/flight` — recent leg history for one flight number
@@ -48,4 +23,29 @@ npm install
 npm run dev
 ```
 
-The web app reads `FR24_API_TOKEN`, `DEMO_AIRPORT`, `DEMO_FLIGHT`, and `DEMO_LOOKBACK_DAYS` from your project `.env`.
+Copy [`.env.example`](.env.example) to `.env` in the project root and set:
+
+- `FR24_API_TOKEN` (required)
+- `DEMO_AIRPORT` (optional)
+- `DEMO_FLIGHT` (optional)
+- `DEMO_LOOKBACK_DAYS` (optional)
+
+The web app reads these values from your local environment. Only commit [`.env.example`](.env.example), never your real token.
+
+### Deploy to Vercel
+
+1. Push this repository to GitHub.
+2. In Vercel, import the repo and set the project root directory to `web`.
+3. Add these environment variables in Vercel Project Settings:
+   - `FR24_API_TOKEN` (required)
+   - `DEMO_AIRPORT` (optional)
+   - `DEMO_FLIGHT` (optional)
+   - `DEMO_LOOKBACK_DAYS` (optional)
+4. Deploy and verify:
+   - `/`
+   - `/api/airport?airport=SEA`
+   - `/api/flight?flight=KE41`
+
+Notes:
+- The API routes use the Node.js runtime on Vercel.
+- `/api/airport` may take longer because it retries after FR24 rate limiting and keeps a short in-memory cache per server instance.

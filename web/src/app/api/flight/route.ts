@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiDt, fr24Get } from "@/lib/fr24";
 
+export const runtime = "nodejs";
+export const maxDuration = 60;
+
 type FlightRow = {
   fr24_id?: string;
   flight?: string;

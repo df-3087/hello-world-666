@@ -3,30 +3,13 @@
 .env.*
 !.env.example
 
-# Streamlit local secrets (optional; same rule as .env)
-.streamlit/secrets.toml
-
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-.Python
-venv/
-.venv/
 .env.local
-env/
-*.egg-info/
-.eggs/
-dist/
-build/
+.venv/
 
 # IDE / OS
 .idea/
 .vscode/
 .DS_Store
-
-# Streamlit / tooling
-.streamlit/cache/
 
 # Local scratch (SDK inspection, etc.)
 .tmp_fr24/
