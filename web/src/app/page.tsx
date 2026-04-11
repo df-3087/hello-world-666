@@ -15,8 +15,8 @@ type AirportPayload = {
   summary: { arrivals24h: number; departures24h: number };
   arrivalsSeries: SeriesPoint[];
   departuresSeries: SeriesPoint[];
-  arrivals: Record<string, string | null>[];
-  departures: Record<string, string | null>[];
+  arrivals: Record<string, string | null | undefined>[];
+  departures: Record<string, string | null | undefined>[];
   error?: string;
 };
 
@@ -30,6 +30,31 @@ type FlightPayload = {
 function extractTime(label: string): string {
   const match = label.match(/\d{2}:\d{2}/);
   return match ? match[0] : label;
+}
+
+function toLocalTime(utcStr: string | null | undefined, tz: string): string {
+  if (!utcStr) return "--";
+  const iso = utcStr.endsWith("Z") ? utcStr : `${utcStr}Z`;
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "--";
+  return d.toLocaleString("en-US", {
+    timeZone: tz,
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
+function taxiMinutes(landedUtc: string | null | undefined, gateArrivalUtc: string | null | undefined): string {
+  if (!landedUtc || !gateArrivalUtc) return "--";
+  const landed = new Date(landedUtc.endsWith("Z") ? landedUtc : `${landedUtc}Z`);
+  const gateArrival = new Date(gateArrivalUtc.endsWith("Z") ? gateArrivalUtc : `${gateArrivalUtc}Z`);
+  if (isNaN(landed.getTime()) || isNaN(gateArrival.getTime())) return "--";
+  const mins = Math.round((gateArrival.getTime() - landed.getTime()) / 60000);
+  if (mins < 0 || mins > 120) return "--";
+  return `${mins} min`;
 }
 
 function SparkBars({ points }: { points: SeriesPoint[] }) {
@@ -160,15 +185,17 @@ export default function HomePage() {
                 <tr>
                   <th>Flight</th>
                   <th>From</th>
-                  <th>Landed (UTC)</th>
+                  <th>Landed (local)</th>
+                  <th>Taxi-in</th>
                 </tr>
               </thead>
               <tbody>
                 {(airportData?.arrivals ?? []).map((r, i) => (
                   <tr key={`${r.fr24_id || "a"}-${i}`}>
                     <td>{r.flight || r.callsign || "--"}</td>
-                    <td>{r.orig_icao || "--"}</td>
-                    <td>{r.datetime_landed || "--"}</td>
+                    <td>{r.origin_icao || "--"}</td>
+                    <td>{toLocalTime(r.datetime_landed, airportData?.airport.timezone ?? "UTC")}</td>
+                    <td>{taxiMinutes(r.datetime_landed, r.datetime_gate_arrival)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -191,7 +218,7 @@ export default function HomePage() {
                 {(airportData?.departures ?? []).map((r, i) => (
                   <tr key={`${r.fr24_id || "d"}-${i}`}>
                     <td>{r.flight || r.callsign || "--"}</td>
-                    <td>{r.dest_icao || "--"}</td>
+                    <td>{r.destination_icao || "--"}</td>
                     <td>{r.datetime_takeoff || "--"}</td>
                   </tr>
                 ))}
@@ -215,10 +242,10 @@ export default function HomePage() {
             </tr>
           </thead>
           <tbody>
-            {(flightData?.legs ?? []).slice(0, 20).map((r, i) => (
+            {(flightData?.legs ?? []).map((r, i) => (
               <tr key={`${r.fr24_id || "f"}-${i}`}>
                 <td>{r.flight || r.callsign || "--"}</td>
-                <td>{`${r.orig_icao || "--"} -> ${r.dest_icao || "--"}`}</td>
+                <td>{`${r.origin_icao || "--"} -> ${r.destination_icao || "--"}`}</td>
                 <td>{r.datetime_takeoff || "--"}</td>
                 <td>{r.datetime_landed || "--"}</td>
                 <td>{r.type || "--"}</td>

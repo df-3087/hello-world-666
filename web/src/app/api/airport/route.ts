@@ -17,11 +17,22 @@ type AirportFull = {
 type FlightRow = {
   flight?: string;
   callsign?: string;
-  orig_icao?: string;
-  dest_icao?: string;
+  origin_icao?: string;
+  destination_icao?: string;
   datetime_takeoff?: string;
   datetime_landed?: string;
+  datetime_gate_arrival?: string | null;
   fr24_id?: string;
+};
+
+type FlightEvent = {
+  type: string;
+  timestamp?: string;
+};
+
+type FlightEventsRow = {
+  fr24_id: string;
+  events?: FlightEvent[];
 };
 
 const ROW_CAP = 300;
@@ -29,7 +40,7 @@ const MIN_CHUNK_MS = 2 * 3600 * 1000; // 2h
 const COARSE_CHUNK_MS = 24 * 3600 * 1000; // 24h
 const REQ_MIN_GAP_MS = 400;
 const RETRY_429_SLEEP_MS = 62000;
-const AIRPORT_CACHE_TTL_MS = 2 * 60 * 1000;
+const AIRPORT_CACHE_TTL_MS = 30 * 60 * 1000;
 
 function parseFr24Utc(raw?: string): Date | null {
   if (!raw) return null;
@@ -91,7 +102,7 @@ async function fetchSliceBoth(icao: string, from: Date, to: Date, ctx: FetchCtx)
   }
   ctx.lastReqAt = Date.now();
   try {
-    const res = await fr24Get<{ data?: FlightRow[] }>(`/api/flight-summary/full`, {
+    const res = await fr24Get<{ data?: FlightRow[] }>(`/api/flight-summary/light`, {
       flight_datetime_from: apiDt(from),
       flight_datetime_to: apiDt(to),
       airports: `both:${icao}`,
@@ -104,7 +115,7 @@ async function fetchSliceBoth(icao: string, from: Date, to: Date, ctx: FetchCtx)
     if (message.includes("429")) {
       await sleep(RETRY_429_SLEEP_MS);
       ctx.lastReqAt = 0;
-      const retry = await fr24Get<{ data?: FlightRow[] }>(`/api/flight-summary/full`, {
+      const retry = await fr24Get<{ data?: FlightRow[] }>(`/api/flight-summary/light`, {
         flight_datetime_from: apiDt(from),
         flight_datetime_to: apiDt(to),
         airports: `both:${icao}`,
@@ -166,29 +177,77 @@ function getCachedAirportPayload(cacheKey: string): AirportPayload | null {
   return cached.payload;
 }
 
+async function fetchGateArrivals(fr24Ids: string[]): Promise<Map<string, string>> {
+  const result = new Map<string, string>();
+  if (fr24Ids.length === 0) return result;
+
+  const BATCH = 10;
+  const ctx: FetchCtx = { lastReqAt: 0 };
+
+  for (let i = 0; i < fr24Ids.length; i += BATCH) {
+    const batch = fr24Ids.slice(i, i + BATCH);
+    const now = Date.now();
+    const gap = now - ctx.lastReqAt;
+    if (ctx.lastReqAt > 0 && gap < REQ_MIN_GAP_MS) {
+      await sleep(REQ_MIN_GAP_MS - gap);
+    }
+    ctx.lastReqAt = Date.now();
+
+    const doFetch = async () => {
+      const res = await fr24Get<{ data?: FlightEventsRow[] }>(
+        `/api/historic/flight-events/light`,
+        { flight_ids: batch.join(",") }
+      );
+      for (const row of res.data ?? []) {
+        const ev = (row.events ?? []).find((e) => e.type === "gate_arrival");
+        if (ev?.timestamp) result.set(row.fr24_id, ev.timestamp);
+      }
+    };
+
+    try {
+      await doFetch();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.includes("429")) {
+        await sleep(RETRY_429_SLEEP_MS);
+        ctx.lastReqAt = 0;
+        try { await doFetch(); } catch { /* best-effort: skip batch on second failure */ }
+      }
+      // Non-429 errors: skip this batch silently rather than failing the whole request
+    }
+  }
+
+  return result;
+}
+
 async function buildAirportPayload(airport: string): Promise<AirportPayload> {
   const now = new Date();
   const windowStart = new Date(now.getTime() - 24 * 3600 * 1000);
-  const from48h = new Date(now.getTime() - 48 * 3600 * 1000);
 
-  // Static airport endpoint is path-parameter based: /api/static/airports/{code}/full
-  // (the prior query-param form returned FR24 404).
   const airportData = await fr24Get<AirportFull>(`/api/static/airports/${airport}/full`, {});
   const icao = (airportData.icao || airport).toUpperCase();
   const tz = airportData.timezone?.name || "UTC";
 
-  const rows = await fetchAirportRowsMerged(icao, from48h, now);
-  const inbound = rows.filter((r) => (r.dest_icao || "").toUpperCase() === icao);
-  const outbound = rows.filter((r) => (r.orig_icao || "").toUpperCase() === icao);
+  const rows = await fetchAirportRowsMerged(icao, windowStart, now);
+  const inbound = rows.filter((r) => (r.destination_icao || "").toUpperCase() === icao);
+  const outbound = rows.filter((r) => (r.origin_icao || "").toUpperCase() === icao);
 
-  const arrivalsInWindow = inbound.filter((r) => {
+  const arrivals = inbound.filter((r) => {
     const d = parseFr24Utc(r.datetime_landed);
     return !!d && d >= windowStart && d <= now;
   });
-  const departuresInWindow = outbound.filter((r) => {
+  const departures = outbound.filter((r) => {
     const d = parseFr24Utc(r.datetime_takeoff);
     return !!d && d >= windowStart && d <= now;
   });
+
+  const arrivalFr24Ids = arrivals.map((r) => r.fr24_id).filter((id): id is string => !!id);
+  const gateArrivalsMap = await fetchGateArrivals(arrivalFr24Ids);
+
+  const arrivalsWithGate = arrivals.map((r) => ({
+    ...r,
+    datetime_gate_arrival: r.fr24_id ? (gateArrivalsMap.get(r.fr24_id) ?? null) : null,
+  }));
 
   return {
     airport: {
@@ -200,13 +259,13 @@ async function buildAirportPayload(airport: string): Promise<AirportPayload> {
       timezone: tz,
     },
     summary: {
-      arrivals24h: arrivalsInWindow.length,
-      departures24h: departuresInWindow.length,
+      arrivals24h: arrivals.length,
+      departures24h: departures.length,
     },
-    arrivalsSeries: toHourSeries(arrivalsInWindow, "datetime_landed", tz, windowStart, now),
-    departuresSeries: toHourSeries(departuresInWindow, "datetime_takeoff", tz, windowStart, now),
-    arrivals: inbound,
-    departures: outbound,
+    arrivalsSeries: toHourSeries(arrivals, "datetime_landed", tz, windowStart, now),
+    departuresSeries: toHourSeries(departures, "datetime_takeoff", tz, windowStart, now),
+    arrivals: arrivalsWithGate,
+    departures,
   };
 }
 
