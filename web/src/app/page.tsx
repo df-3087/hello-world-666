@@ -195,6 +195,7 @@ export default function HomePage() {
                   <th>Flight</th>
                   <th>From</th>
                   <th>Landed (local)</th>
+                  <th>Gate Arr (local)</th>
                   <th>Taxi-in</th>
                 </tr>
               </thead>
@@ -204,6 +205,7 @@ export default function HomePage() {
                     <td>{r.flight || r.callsign || "--"}</td>
                     <td>{r.orig_icao || "--"}</td>
                     <td>{toLocalTime(r.datetime_landed, airportData?.airport.timezone ?? "UTC")}</td>
+                    <td>{toLocalTime(r.datetime_gate_arrival, airportData?.airport.timezone ?? "UTC")}</td>
                     <td>{elapsedMinutes(r.datetime_landed, r.datetime_gate_arrival)}</td>
                   </tr>
                 ))}
@@ -220,6 +222,7 @@ export default function HomePage() {
                 <tr>
                   <th>Flight</th>
                   <th>To</th>
+                  <th>Gate Dep (local)</th>
                   <th>Takeoff (local)</th>
                   <th>Taxi-out</th>
                 </tr>
@@ -229,6 +232,7 @@ export default function HomePage() {
                   <tr key={`${r.fr24_id || "d"}-${i}`}>
                     <td>{r.flight || r.callsign || "--"}</td>
                     <td>{r.dest_icao || "--"}</td>
+                    <td>{toLocalTime(r.datetime_gate_departure, airportData?.airport.timezone ?? "UTC")}</td>
                     <td>{toLocalTime(r.datetime_takeoff, airportData?.airport.timezone ?? "UTC")}</td>
                     <td>{elapsedMinutes(r.datetime_gate_departure, r.datetime_takeoff)}</td>
                   </tr>
