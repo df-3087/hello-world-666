@@ -15,9 +15,6 @@ for (const file of [
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
-  env: {
-    SITE_PASSWORD: process.env.SITE_PASSWORD,
-  },
 };
 
 export default nextConfig;

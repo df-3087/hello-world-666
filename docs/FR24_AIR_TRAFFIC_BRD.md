@@ -1,41 +1,43 @@
 # Business requirements and design document
 
-This specification lives in-repo for version control and sharing. It covers a Streamlit-first MVP using the Flightradar24 API (Essential tier), product strategy, personas, requirements, and a late-phase AI narrative layer. A parallel copy may exist in local Cursor plan storage; **treat this file as the project source of truth** when they differ.
+This specification lives in-repo for version control and sharing. It covers the Flightradar24-powered air traffic analytics web app (Next.js), product strategy, personas, and requirements. **Treat this file as the project source of truth.**
 
 ## Implementation checklist
 
-- [ ] Freeze MVP scope: airport + flight-number pages; default 7-day window; About/Legal copy for data retention
-- [ ] Define `fr24_analytics/` (client, queries, metrics, caching) separate from `streamlit_app.py`
-- [ ] Two-page Streamlit layout: sidebar, metrics, charts, data-quality footers
-- [ ] Phase 2: choose Next.js + BFF vs FastAPI + SPA; expose OpenAPI-shaped JSON from the metrics layer
-- [ ] Phase 3: AI synthesis agent — grounded metric payload, LLM, disclaimers; align with privacy and FR24 storage rules
+- [x] Single flight number input drives all three reporting containers
+- [x] Container 1 — Flight history: last 10 legs with takeoff/landing times, taxi-in/out, aircraft type, flight duration
+- [x] Container 2 — Departure airport context: recent departures from origin airport (directional, `outbound:ICAO`)
+- [x] Container 3 — Arrival airport context: recent arrivals at destination airport (directional, `inbound:ICAO`)
+- [x] Resolve route from flight legs: derive `orig_icao` + `dest_icao` from most recent completed leg
+- [x] Switch `/api/airport` from `airports=both:ICAO` to directional filters (`outbound:` / `inbound:`)
+- [x] Coverage footers and data-quality labels on all three containers
 
 ---
 
-## Flightradar24-powered air traffic analytics (Streamlit MVP → web)
+## Flightradar24-powered air traffic analytics
 
 **Document type:** Business requirements (BRD) + product/UX design notes + technical constraints  
 **Assumed API tier:** Essential ([Subscriptions & credits](https://fr24api.flightradar24.com/subscriptions-and-credits))  
-**Phase 1 delivery:** Python + Streamlit dashboard  
-**Version:** 1.3 (+ late-stage AI narrative / synthesis agent)
+**Delivery stack:** Next.js (App Router) + server-side FR24 API calls  
+**Version:** 2.0
 
 ---
 
 ## 0. Why this document exists
 
-This file is the single place that ties **why we are building** (product strategy, personas, differentiation), **what we are building** (requirements), **what users see** (UX/design), **what data we can legally and technically use** (constraints), and **how we evolve** to a full website without starting analytics from scratch.
+This file is the single place that ties **why we are building** (product strategy, personas, differentiation), **what we are building** (requirements), **what users see** (UX/design), and **what data we can legally and technically use** (constraints).
 
 ---
 
 ## 1. Executive summary
 
-We will ship a **two-area analytics experience** for **frequent travelers who are also aviation enthusiasts**—people who want **airport and flight “texture”** (who flies, where, with what aircraft, how busy it is) that **generic search and airline apps do not surface**, not another timetable clone.
+We serve **frequent travelers who have already booked a flight** and want to do meaningful pre-trip research using their flight number. They know exactly which flight they're taking. They want to understand how that flight has performed historically and what the airport environments they're passing through actually look like in practice.
 
-1. **Airport hub** — user picks an airport (dropdown) and sees traffic, airline/aircraft mix, route leaders, and operational timing insights derived from FR24 historical/summary data over a selectable short window (default 7 days).
-2. **Flight number lens** — user enters a commercial flight number and sees recent leg history, route consistency, timing distributions, and optional deep dives (e.g. track) where cost and data allow.
-3. **Late-stage: AI-assisted narrative (post–core analytics maturity)** — an agent summarizes the **already-computed** charts and KPIs into short, plain-language takeaways (e.g. what a high diversion rate might imply, what “peak hour” means for the user’s selected window)—see Section 18.
+The product is built around a **single input: a flight number**. That one input drives three reporting containers shown together on the same page:
 
-**Phase 1** is a **Streamlit** app for speed. Core logic lives in **importable Python modules** so **Phase 2** can add a “real” web UI and API without re-deriving metrics.
+1. **Flight history** — the last 10 legs operated under that flight number, showing historical takeoff and landing times, taxi-in and taxi-out times, aircraft type, and flight duration.
+2. **Departure airport context** — recent departures from the origin airport (resolved from the flight's route), giving the traveler a real picture of how that airport performs as a departure experience.
+3. **Arrival airport context** — recent arrivals at the destination airport, giving the traveler a real picture of what arriving there actually looks like.
 
 ---
 
@@ -43,80 +45,76 @@ We will ship a **two-area analytics experience** for **frequent travelers who ar
 
 ### 2.1 Vision and positioning
 
-This product is **not** a substitute for Google Flights, airline apps, or airport home pages. Those tools optimize for **itineraries**: prices, gates, and **published** departure/arrival times.
+This product is **not** a substitute for Google Flights, airline apps, or airport home pages. Those tools optimize for **itineraries**: prices, gates, and published departure/arrival times.
 
-Our strategy is to occupy a **narrow adjacent space**: **observed aviation behavior** and **patterns** that are hard to get from a generic search—who is actually moving at an airport, on which routes, with which aircraft, and how stable that picture is over recent weeks. We serve **curiosity, trip intuition, and enthusiast depth**, not commoditized timetable rows.
+Our strategy is to occupy a **narrow adjacent space**: **observed aviation behavior** and **patterns** that are impossible to get from a generic search. We serve **pre-trip research for travelers who already know their flight number**—people who want depth and context about their specific upcoming journey, not another timetable.
 
 ### 2.2 Strategic pillars
 
-1. **Depth over generic search** — Surface aggregates and distributions (movements by day/hour, airline and aircraft mix, top routes, diversion signals, operational timing proxies) that a Google answer box or a single flight card does not provide.
-2. **Enthusiast-grade detail, traveler-friendly packaging** — Registrations, operator vs marketing carrier (`operated_as` vs `painted_as`), route stability, and optional tracks satisfy spotters; the same views help frequent flyers build intuition about **how busy or variable** their hubs feel in practice.
-3. **Differentiation vs “standard web” info** — Generic results prioritize **the next flight** and static facts. We prioritize **comparative context**: how an airport or flight number **behaved recently** as a system (volume, mix, patterns)—aligned with FR24’s strengths as a tracking-derived dataset.
-4. **Unique analytics first; timetable parity optional** — Published departure/arrival times are **not** a strategic must-have for v1. FR24’s API focus is on **tracked** flights and events, not full public schedules ([FAQ](https://fr24api.flightradar24.com/docs/faq)). We **embrace that fit**: the analytics catalog (Section 9) is **P0**; reproducing Google-style “what time is my flight” is **P2 or out of scope**. Observed timestamps support **pattern** metrics (e.g. airborne duration, peak banks, proxies where events exist), not schedule-delay claims.
-5. **Interpretability through synthesis (late stage)** — Our charts and KPIs are **niche and technical** (ICAO codes, diversion rates, taxi proxies, coverage). Many users in the Alex persona will ask **“so what?”** After core analytics are stable, we add an **AI narrative layer** that turns **the same numbers already on screen** (plus definitions and caveats) into **short, contextual explanations**—not new hidden data. Examples: *What might it mean if diversion rate looks high for this airport and window?* *What does peak hour here tell me about congestion or bank structure—without claiming a cause?* This pillar is **explicitly after** MVP 0.1–0.3; see Section 18 and the release plan.
+1. **Flight-number-first** — Everything flows from the flight number. The traveler does not need to know ICAO codes or airport names; the app resolves the route and surfaces context automatically.
+2. **Depth over generic search** — Surface historical distributions (flight duration spread, taxi time proxies, equipment used, how busy the arrival airport has been) that no airline app or Google result provides.
+3. **Enthusiast-grade detail, traveler-friendly packaging** — Registrations, aircraft types, and timing distributions satisfy spotters; the same data helps frequent flyers build intuition about **how their journey typically goes**.
+4. **Observed behavior, not timetables** — Published schedules are not a strategic must-have. FR24's strength is **tracked** flights and events. The analytics catalog (Section 9) is built on that foundation. Reproducing a "next departure" timetable card is out of scope.
 
 ### 2.3 Product principles (PM checklist)
 
-- Lead with **one clear insight** per screen (e.g. “Busiest hours this week,” “This flight’s usual city pair”).
+- Lead with **one clear insight** per container (e.g. "This flight's typical duration," "How busy arrivals are at your destination").
 - Show **coverage** wherever data is partial so trust stays high.
-- Prefer **interesting and honest** over **simple and misleading** (no “delay vs schedule” without schedule data).
-- Treat expensive calls (**flight tracks**) as **opt-in** actions.
-- When AI is enabled: **never** present model prose as operational fact; **ground** summaries in cited metrics; show **disclaimer** and **regenerate** control.
+- Prefer **interesting and honest** over **simple and misleading** (no "delay vs schedule" without schedule data).
 
 ### 2.4 Strategic success signals
 
-- Users describe the product as the layer **under** the airline app: “how my airport actually operates lately,” not “what time is boarding.”
-- Repeat visits: same airports, same flight numbers before trips—**habit**, not one-off novelty.
-- (Late stage) Users report the **AI summary** helped them understand **one metric they would have skipped** (e.g. diversion rate, peak hour) without feeling misled.
+- Users describe the product as the layer **under** the airline app: "how my flight and airports actually operate lately," not "what time is boarding."
+- Repeat visits before trips using the same flight number—**habit**, not one-off novelty.
 
 ### 2.5 Roadmap placement (strategy summary)
 
 | Horizon | Focus |
 |---------|--------|
-| **Now–MVP 0.3** | Ship analytics + charts + coverage footers; no generative AI dependency. |
-| **Phase 2** | Optional full web shell; still human-written tooltips and static “What is this?” copy. |
-| **Phase 3 / late product** | **AI narrative agent**: server-side synthesis from structured summaries of on-page data; optional follow-up questions in scope only if grounded and safe. |
+| **Current baseline** | Single-page Next.js app with flight history + airport context (both directional) from FR24. |
+| **Near-term** | Directional airport filters, last-10-legs cap, taxi-in/out enrichment for flight container, coverage footers. |
 
 ---
 
 ## 3. User personas
 
-Primary design target is **one composite persona** (frequent traveler **and** aviation enthusiast). Copy and marketing can emphasize travel or spotting, but **one feature set** should serve both.
+Primary design target is **one composite persona** (frequent traveler who is also an aviation enthusiast). Copy and marketing can emphasize travel or spotting, but **one feature set** serves both.
 
-### 3.1 Primary persona: “Alex” — Frequent traveler + aviation enthusiast
+### 3.1 Primary persona: "Alex" — Frequent traveler + aviation enthusiast
 
-**Sketch:** Travels several times a year or more; uses airline apps for bookings; enjoys following flights on radar apps, reading trip reports, or caring about aircraft types and airlines.
+**Sketch:** Has already booked a flight. Knows the flight number. Travels several times a year or more; uses airline apps for bookings; enjoys following flights on radar apps, reading trip reports, or caring about aircraft types and airlines.
 
 **Jobs to be done**
 
-- **Airport:** “Before I fly through `X`, what does activity there **look like** lately—how busy, who dominates, which routes are huge?”
-- **Flight number:** “For the flight I often take, is it **always** the same pair of cities and equipment, or does it vary? Anything **weird** lately (e.g. diversion)?”
+- "I've booked flight `KE41`. Before I fly, I want to know: how does this flight **typically** perform? What aircraft does it usually use? How long does it normally take?"
+- "What is the departure experience actually like at my origin airport lately? What about arrivals at my destination—how busy is it, how smoothly do flights arrive?"
 
 **Frustrations with Google / generic travel sites**
 
-- Single-query results: **one** next departure or generic airport blurb, not **distributions** or **ecosystem** view.
-- No **operator vs livery**, **aircraft mix**, **route leaderboard**, or **recent pattern** without digging across many sources.
-- Even when we show rich charts, **jargon and nuance** (e.g. diversion %, peak hour in UTC vs local, small sample sizes) make it hard to extract **meaning** without a guided narrative.
+- Single-query results: **one** next departure or generic airport blurb, not **distributions** or **historical patterns**.
+- No aircraft type history, taxi-time insight, or arrival volume context without digging across many sources.
+- Even when rich data exists, **jargon and nuance** (UTC vs local, small sample sizes, ICAO codes) make it hard to extract practical meaning.
 
 **Wow moments we want**
 
-- “I didn’t realize **this much** traffic at my airport was **airline Y** / **type Z** this month.”
-- “My usual flight number **mostly** does `A→B`, but here’s the **spread** and one odd diversion.”
+- "I didn't realize this flight almost always uses a 777, but occasionally swaps to a 787."
+- "Arrivals at my destination have been heavy in the late afternoon this week—good to know before I land."
+- "The taxi-out from my departure airport consistently runs 20+ minutes—I should factor that into my connection window intuition."
 
 **Implications for backlog priority**
 
-- P0: movements over time, airline/aircraft mix, top routes, diversions, peak-hour views, flight-number leg history and route mode.
-- P1: taxi / gate **proxies** where event coverage allows, with explicit coverage stats.
-- P2: anything that merely **duplicates** a timetable UI.
-- **P3 (late product):** **AI synthesis** block on each main view—plain-language “so what” tied to visible KPIs (Section 18).
+- P0: last-10-legs flight history with takeoff/landing times, duration, aircraft type, taxi-in/out proxies.
+- P0: directional airport context (departures from origin; arrivals at destination) with recent rows and hourly volumes.
+- P1: coverage footers explaining data gaps; UTC + airport local time display.
+- P2: optional track preview for individual legs.
 
-### 3.2 Secondary persona: “Jordan” — Pure enthusiast (spotter / deep tracker)
+### 3.2 Secondary persona: "Jordan" — Pure enthusiast (spotter / deep tracker)
 
 **Sketch:** Cares about registrations, types, and paths for fun or planespotting planning.
 
-**Implications:** Same screens; emphasize **registration** and **optional tracks** in the flight table and CTAs. Jordan reinforces the **depth** story but is not a separate product line in v1.
+**Implications:** Same screens; emphasize **registration** and **optional tracks** in the flight history table. Jordan reinforces the **depth** story but is not a separate product line in v1.
 
-### 3.3 Anti-personas (not primary in v1)
+### 3.3 Anti-personas (not primary)
 
 - **Fare shopper** — Metasearch wins; we do not compete on price.
 - **Certified ops / airline OCC** — Needs regulated tools; we are **exploratory analytics only**.
@@ -127,33 +125,30 @@ Primary design target is **one composite persona** (frequent traveler **and** av
 
 ### 4.1 Goals
 
-- Demonstrate **credible, interesting** airport and flight-level analytics from FR24.
-- Keep **credit/rate-limit** usage predictable (caching, pagination, user-visible limits).
-- Respect **FR24 storage rules** and honest labeling of **data limitations** (coverage, no public schedule feed for classic “delay vs schedule”).
-- **Late-stage goal:** Help users interpret technical metrics via an **AI-generated narrative** that is **grounded in the computed aggregates** shown on the page (not speculative real-time ops claims).
+- Deliver **credible, interesting** flight history and airport context from a single flight number input.
+- Keep **credit/rate-limit** usage predictable (caching, directional filters, user-visible limits).
+- Respect **FR24 storage rules** and honest labeling of **data limitations** (coverage, no public schedule feed for classic "delay vs schedule").
 
-### 4.2 Non-goals (v1)
+### 4.2 Non-goals
 
 - Certified operational or regulatory reporting.
-- Global “all airports at once” analytics.
-- Storing multi-year raw FR24 payloads in your database (see compliance).
-- **MVP 0.1–0.3:** No **generative AI** dependency; static tooltips and docs only.
-- **Any AI phase:** No **ungrounded** claims (e.g. “your flight will be late”); no presenting LLM text as **official** airline or airport guidance.
+- Global "all airports at once" analytics.
+- An independent airport search experience (airports are always reached through a flight number).
+- Storing multi-year raw FR24 payloads in a database (see compliance).
 
 ### 4.3 Success metrics (product)
 
-- User completes **airport** flow end-to-end in under 60 seconds after first visit.
-- User completes **flight number** flow with at least one chart and one table without errors on a “healthy” flight (data exists).
-- **Support burden:** users understand why a metric is “N/A” (tooltips / data coverage footers).
-- **Phase 3:** Users report the AI panel clarified **at least one** metric (e.g. diversion rate, peak hour) without increasing mistaken belief that the app is “official” ops guidance (spot-check disclaimer visibility).
+- User enters a flight number and sees all three containers load without errors on a "healthy" flight (data exists).
+- User completes the full flow—flight history + both airport contexts—in under 90 seconds after first visit.
+- **Support burden:** users understand why a metric is "N/A" (tooltips / data coverage footers).
 
 ---
 
 ## 5. Stakeholders and roles
 
-- **Product owner:** defines priority of metrics and copy (“fun” vs “serious”); owns persona fit and differentiation vs generic travel search.
-- **Builder (you):** implements Streamlit + Python services; manages API token and deploy secrets.
-- **End users:** primarily **Alex** (frequent traveler + enthusiast) and secondarily **Jordan** (pure enthusiast); copy must clarify operational vs schedule claims (see Sections 2–3); AI narrative (Section 18) must reinforce the same honesty bar.
+- **Product owner:** defines priority of metrics and copy ("practical" vs "enthusiast depth"); owns persona fit and differentiation vs generic travel search.
+- **Builder:** implements Next.js + server-side FR24 services; manages API token and deploy secrets.
+- **End users:** primarily **Alex** (frequent traveler + enthusiast) and secondarily **Jordan** (pure enthusiast); copy must clarify operational vs schedule claims.
 
 ---
 
@@ -162,83 +157,73 @@ Primary design target is **one composite persona** (frequent traveler **and** av
 | Topic | Requirement | Product implication |
 |--------|-------------|-------------------|
 | Storage | FR24: accumulated API data not stored **> 30 days** from first receipt ([Storage rules](https://fr24api.flightradar24.com/docs/storage-rules)) | Rolling retention for raw pulls; prefer on-the-fly aggregates; document deletion approach. |
-| Schedules | No full timetable/schedule product via API for classic delay KPIs ([FAQ](https://fr24api.flightradar24.com/docs/faq)) | Use terms like **operational timing**, **taxi-time proxy**, **airborne time** — not “official delay.” |
-| Credits / limits | Per-entity pricing; Essential has higher response limits and rate limits than Explorer ([Subscriptions & credits](https://fr24api.flightradar24.com/subscriptions-and-credits)) | Pagination, `limit` discipline, cache TTL, optional “estimated credits” label. |
+| Schedules | No full timetable/schedule product via API for classic delay KPIs ([FAQ](https://fr24api.flightradar24.com/docs/faq)) | Use terms like **operational timing**, **taxi-time proxy**, **airborne time** — not "official delay." |
+| Credits / limits | Per-entity pricing; Essential has higher response limits and rate limits than Explorer ([Subscriptions & credits](https://fr24api.flightradar24.com/subscriptions-and-credits)) | Pagination, `limit` discipline, cache TTL, optional "estimated credits" label. |
 | Accuracy | Coverage gaps, estimation possible per FR24 docs/FAQ | Show **coverage %** and null counts on derived metrics. |
-| **AI / LLM** | Third-party model providers process **prompts**; may include **aggregated** metric JSON + metric definitions (not necessarily raw FR24 payloads) | Disclose provider; minimize PII; **opt-in** or clear affordance; retention policy for prompts/responses; user-facing **disclaimer** (“educational, not operational”); align any stored logs with **30-day** posture where applicable. |
 
 ---
 
-## 7. User journeys and epics
+## 7. User journeys
 
-### 7.1 Airport journey
+### 7.1 Primary journey: research my upcoming flight
 
-1. Open **Airport** page.
-2. Choose **date window** (7 / 14 / 30 days).
-3. Choose **airport** from dropdown (IATA/ICAO).
-4. Choose **movement type** filter: departures, arrivals, or both (recommended v1: both with clear labeling).
-5. View **KPI row**, **charts**, **tables**, and **footnotes**.
-6. (Optional v1.1) Download CSV for current table.
-7. **(Phase 3)** Open **AI summary** (or “Explain this view”) to read a short synthesis of the **current** airport metrics and charts (e.g. diversion rate in context, peak hour interpretation for the selected window and timezone).
-
-### 7.2 Flight number journey
-
-1. Open **Flight** page.
-2. Enter **flight number** (free text).
-3. Choose **date window** (default 14–30 days per credit policy).
-4. View **summary stats** + **legs table**.
-5. (Optional) Click **Load track** for one `fr24_id` (explicit cost action).
-6. **(Phase 3)** Use **AI summary** to interpret leg history, route stability, and timing spread in plain language (still grounded in table/chart values).
+1. Open the app.
+2. Enter **flight number** (e.g. `KE41`) in the single search input.
+3. App fetches the last 10 legs for that flight number and resolves the route (`orig_icao` + `dest_icao` from the most recent completed leg).
+4. **Container 1 — Flight history** loads: table of last 10 legs with takeoff/landing times, flight duration, aircraft type, and taxi-in/taxi-out where gate event data is available.
+5. **Container 2 — Departure airport context** loads: recent departures from the origin airport, with hourly volume and recent departure rows.
+6. **Container 3 — Arrival airport context** loads: recent arrivals at the destination airport, with hourly volume and recent arrival rows.
+7. User reads coverage footers to understand data gaps.
+8. (Optional) User clicks **Load track** for a specific leg to see the flight path (explicit credit-heavy action).
 
 ---
 
 ## 8. Functional requirements
 
-### 8.1 Global (both pages)
+### 8.1 Global
 
 | ID | Requirement |
 |----|-------------|
 | FR-G-1 | All FR24 calls run **server-side**; token never sent to browser. |
 | FR-G-2 | **Loading** states for any action > 2s. |
-| FR-G-3 | **Empty state** when zero rows; suggest broader window or different filter. |
+| FR-G-3 | **Empty state** when zero rows; suggest broader window or different flight number. |
 | FR-G-4 | **Error state** for 401/403/429/5xx with human-readable guidance. |
-| FR-G-5 | Display **UTC** always; optionally show **airport local** when airport context known (timezone from Airports full). |
-| FR-G-6 | **About / Data** expander: limitations + link to FR24 API docs. |
+| FR-G-5 | Display **UTC** always; optionally show **airport local** when airport context is known (timezone from Airports full). |
+| FR-G-6 | **Data / coverage** footer on each container: limitations + link to FR24 API docs. |
 
-### 8.2 Airport page
-
-| ID | Requirement |
-|----|-------------|
-| FR-AP-1 | Dropdown to select **one** airport at a time (v1). |
-| FR-AP-2 | Airport list sourced from **cached** static list (JSON) seeded from FR24 Airports light/full + periodic refresh job, or from bundled top-N list for MVP. |
-| FR-AP-3 | Filters: date window; movement direction (inbound/outbound/both) mapped to FR24 `airports=` filter semantics ([Flight Summary](https://fr24api.flightradar24.com/docs/endpoints/flight-summary)). |
-| FR-AP-4 | Show **movements per day** time series. |
-| FR-AP-5 | Show **top airlines** by movement count (`operated_as` primary; optional toggle `painted_as`). |
-| FR-AP-6 | Show **top routes** (other airport endpoint) for selected direction. |
-| FR-AP-7 | Show **aircraft type** distribution (ICAO type). |
-| FR-AP-8 | Show **diversion indicator** when actual destination ≠ planned (field-dependent). |
-| FR-AP-9 | If historic events used: show **taxi-out / taxi-in proxy** distributions **only** when both timestamps exist; show **coverage %**. |
-
-### 8.3 Flight number page
+### 8.2 Flight history container (FR-FN-*)
 
 | ID | Requirement |
 |----|-------------|
-| FR-FN-1 | Accept flight number input; **normalize** (strip spaces, upper case; map common IATA airline prefix + numeric to query form accepted by API). |
-| FR-FN-2 | Query **Flight summary** by `flights=` + time range (per docs); paginate if needed. |
-| FR-FN-3 | Table of legs: date, origin, dest, times, airline codes, reg/type if present, `fr24_id`. |
-| FR-FN-4 | Summary: leg count, route mode, median/p90 airborne time when computable. |
-| FR-FN-5 | Optional: fetch **flight tracks** only on explicit user action per leg. |
+| FR-FN-1 | Accept flight number input; **normalize** (strip spaces, upper case; map IATA airline prefix + numeric to FR24 query form). |
+| FR-FN-2 | Fetch the **last 10 completed legs** for the entered flight number via `flight-summary/full`; sort descending by takeoff time. |
+| FR-FN-3 | For each leg show: date, origin, destination, **takeoff time** (UTC + local), **landing time** (UTC + local), aircraft type, registration. |
+| FR-FN-4 | For each leg compute and show **flight duration** (landed − takeoff) where both timestamps exist; show coverage % when unavailable. |
+| FR-FN-5 | For each leg show **taxi-out proxy** (`takeoff − gate_departure`) and **taxi-in proxy** (`gate_arrival − landed`) via historic flight events; show coverage % when gate events are absent. |
+| FR-FN-6 | Show **summary stats**: median flight duration, most common aircraft type, route mode (most common origin/destination pair). |
+| FR-FN-7 | Optional: fetch **flight tracks** only on explicit user action per leg. |
 
-### 8.4 AI narrative agent (Phase 3 — late product)
+### 8.3 Departure airport context container (FR-DC-*)
 
 | ID | Requirement |
 |----|-------------|
-| FR-AI-1 | **Input grounding:** Model receives only a **structured snapshot** of metrics already computed for the current view (e.g. JSON: diversion_rate, n_legs, peak_hour_local, top_airlines, date_range, coverage flags)—plus **embedded metric definitions** from the analytics catalog (Section 9). |
-| FR-AI-2 | **Output:** Short sections: **Summary** (3–5 bullets), **What to watch** (caveats: small N, UTC vs local, tracking gaps), **Not claims** (no “you will miss your connection”). |
-| FR-AI-3 | **UX:** Collapsible **“AI explanation”** panel; **Regenerate**; visible **disclaimer**; optional **Ask a follow-up** only if prompts stay constrained to on-screen data. |
-| FR-AI-4 | **Server-side only:** API keys for LLM provider in environment/secrets; no keys in browser. |
-| FR-AI-5 | **Cost control:** Rate-limit AI calls per session/IP; cache by `(view, airport/flight, window, metric_hash)` with short TTL. |
-| FR-AI-6 | **Example prompts (product copy):** “Why might diversion rate matter here?” “What does peak hour mean for the dates I selected?” System prompt instructs the model to **cite** numbers from the payload and to **avoid** inventing causes (weather, strikes) unless labeled as general education not tied to this dataset. |
+| FR-DC-1 | Resolve **origin airport** (`orig_icao`) from the most recent completed leg in the flight history result. |
+| FR-DC-2 | Fetch recent **departures only** from the origin airport using `airports=outbound:ICAO` filter (directional). |
+| FR-DC-3 | Show **departures per hour** time series (last 24h or configured window) in airport local timezone. |
+| FR-DC-4 | Show **recent departure rows**: flight, destination, scheduled/actual takeoff time, aircraft type where available. |
+| FR-DC-5 | Show airport name, IATA/ICAO, city, country, and timezone clearly labeled. |
+| FR-DC-6 | Show data coverage footer: window, row count, any gaps. |
+
+### 8.4 Arrival airport context container (FR-AC-*)
+
+| ID | Requirement |
+|----|-------------|
+| FR-AC-1 | Resolve **destination airport** (`dest_icao`) from the most recent completed leg in the flight history result. |
+| FR-AC-2 | Fetch recent **arrivals only** at the destination airport using `airports=inbound:ICAO` filter (directional). |
+| FR-AC-3 | Show **arrivals per hour** time series (last 24h or configured window) in airport local timezone. |
+| FR-AC-4 | Show **recent arrival rows**: flight, origin, actual landing time, aircraft type where available. |
+| FR-AC-5 | Show airport name, IATA/ICAO, city, country, and timezone clearly labeled. |
+| FR-AC-6 | Show data coverage footer: window, row count, any gaps. |
 
 ---
 
@@ -246,171 +231,174 @@ Primary design target is **one composite persona** (frequent traveler **and** av
 
 Use this table in implementation and UI tooltips.
 
-### 9.1 Airport metrics
+### 9.1 Flight history metrics
 
 | Metric | Definition | Primary FR24 source | Key fields | Caveats |
 |--------|------------|---------------------|------------|---------|
-| Movements per day | Count of flight legs matching airport filter per calendar day (UTC or local toggle) | Flight summary light/full | `first_seen` or takeoff/land fields depending on filter | Incomplete legs may skew “day.” |
-| Peak hour | Hour bucket with most movements | Same | timestamp of chosen event | DST handled only if local TZ applied. |
-| Top airlines | Count by `operated_as` | Flight summary | `operated_as` | `painted_as` may differ; explain in UI. |
-| Top routes | Pair counts (airport ↔ other) | Flight summary | origin/dest ICAO/IATA | Direction filter matters. |
-| Aircraft mix | Histogram of `type` | Flight summary | `type` | Missing type common. |
-| Diversion rate | Share where actual dest ≠ planned dest | Flight summary full | `dest_icao` vs `dest_icao_actual` (names per docs) | Rare events; small denominators noisy. |
-| Taxi-out proxy | `takeoff_ts - gate_departure_ts` | Historic flight events | event types `gate_departure`, `takeoff` | Gate events often missing → show coverage. |
-| Taxi-in proxy | `gate_arrival_ts - landed_ts` | Historic flight events | `landed`, `gate_arrival` | Same. |
-| Airborne time | `landed - takeoff` from events, or `flight_time` from summary full | Events or summary full | timestamps / `flight_time` | Live legs may be incomplete. |
+| Takeoff time | UTC timestamp of wheels-off | Flight summary light | `datetime_takeoff` | May be absent for incomplete or live legs. |
+| Landing time | UTC timestamp of wheels-on | Flight summary light | `datetime_landed` | May be absent for incomplete or live legs. |
+| Flight duration | `datetime_landed − datetime_takeoff` | Flight summary light | Both timestamp fields | Only computed for completed legs with both timestamps. |
+| Aircraft type | ICAO type code | Flight summary light | `type` | Missing type is common; show coverage %. |
+| Registration | Tail number | Flight summary light | `reg` | Interesting but not fleet assignment truth. |
+| Route mode | Most common (orig, dest) pair across last 10 legs | Flight summary light | `orig_icao`, `dest_icao` | Seasonal routes may show multi-modal distribution. |
+| Taxi-out proxy | `datetime_takeoff − datetime_gate_departure` | Historic flight events light | `gate_departure`, `takeoff` event types | Gate events often missing — always show coverage %. |
+| Taxi-in proxy | `datetime_gate_arrival − datetime_landed` | Historic flight events light | `landed`, `gate_arrival` event types | Same caveat. |
 
-### 9.2 Flight number metrics
+### 9.2 Departure airport context metrics
 
-| Metric | Definition | Primary FR24 source | Caveats |
-|--------|------------|---------------------|---------|
-| Legs observed | Rows returned for flight + window | Flight summary | Flight number parsing ambiguity across carriers. |
-| Route mode | Most common (orig, dest) pair | Flight summary | Seasonal routes may show multi-modal routes. |
-| Airborne median/p90 | From `flight_time` or event diffs | Summary full / events | Requires completed legs. |
-| Registration churn | Distinct `reg` count | Flight summary | Interesting but not “fleet assignment truth.” |
-| Track preview | Polyline from tracks endpoint | Flight tracks | Credit-heavy; on-demand only. |
+| Metric | Definition | Primary FR24 source | Key fields | Caveats |
+|--------|------------|---------------------|------------|---------|
+| Departures per hour | Count of departed flights per clock hour in airport local TZ | Flight summary light (`outbound:ICAO`) | `datetime_takeoff` | Only counts legs with a confirmed takeoff timestamp. |
+| Recent departures table | Last N departure rows for this airport | Flight summary light | `flight`, `dest_icao`, `datetime_takeoff`, `type` | Window and row cap apply; older rows may be missing. |
+| Peak departure hour | Hour bucket with most departures in the window | Derived from departures series | Hourly buckets | DST handled only if local TZ is applied. |
+
+### 9.3 Arrival airport context metrics
+
+| Metric | Definition | Primary FR24 source | Key fields | Caveats |
+|--------|------------|---------------------|------------|---------|
+| Arrivals per hour | Count of arrived flights per clock hour in airport local TZ | Flight summary light (`inbound:ICAO`) | `datetime_landed` | Only counts legs with a confirmed landing timestamp. |
+| Recent arrivals table | Last N arrival rows for this airport | Flight summary light | `flight`, `orig_icao`, `datetime_landed`, `type` | Window and row cap apply; older rows may be missing. |
+| Peak arrival hour | Hour bucket with most arrivals in the window | Derived from arrivals series | Hourly buckets | DST handled only if local TZ is applied. |
 
 ---
 
 ## 10. FR24 API mapping (engineering backbone)
 
-| Feature | Endpoint (conceptual) | Notes |
-|---------|----------------------|--------|
-| Airport dropdown metadata | Airports light / Airports full | Full gives timezone; Essential includes full per plan page. |
-| Airport movements, routes, mix | Flight summary light or full | Use `airports=` filters; mind 14-day max range per flight-summary doc for range queries; chunk if needed. |
-| Event-based taxi proxies | Historic flight events light/full | Data from 2022-06-01 per overview. |
-| On-demand path | Flight tracks | Requires `fr24_id` from summary/positions. |
-| Usage/cost visibility (optional) | Usage endpoint | Helps monitor credits. |
-| AI narrative (Phase 3) | Customer-chosen LLM API (OpenAI, Anthropic, etc.) | **No FR24 call**; consumes **aggregates** produced by `fr24_analytics/metrics.py` + schema from Section 8.4. |
+| Feature | Endpoint | Notes |
+|---------|----------|--------|
+| Flight history (last 10 legs) | `GET /api/flight-summary/full` with `flights=` | Sort desc, limit 10. Returns `orig_iata`, `dest_iata`, `orig_icao`, `dest_icao`, `datetime_takeoff`, `datetime_landed`, `type`, `reg`, `fr24_id`. |
+| Route resolution | Derived from flight summary result | Use `orig_icao` + `dest_icao` from most recent completed leg. |
+| Taxi-out / taxi-in proxies | `GET /api/historic/flight-events/light` | Batch by `fr24_id`; filter for `gate_departure` and `gate_arrival` event types. Data available from 2022-06-01. |
+| Departure airport context | `GET /api/flight-summary/full` with `airports=outbound:ICAO` | Directional filter; returns only departing flights. |
+| Arrival airport context | `GET /api/flight-summary/full` with `airports=inbound:ICAO` | Directional filter; returns only arriving flights. |
+| Airport metadata (name, TZ, IATA) | `GET /api/static/airports/{icao}/full` | Used to display airport name and convert timestamps to local timezone. |
+| On-demand track | `GET /api/flight-tracks` | Requires `fr24_id`; credit-heavy; on-demand only per explicit user action. |
 
-Authoritative references: [Endpoints overview](https://fr24api.flightradar24.com/docs/endpoints/overview), [Flight Summary](https://fr24api.flightradar24.com/docs/endpoints/flight-summary), [Python SDK](https://fr24api.flightradar24.com/docs/sdk/python).
+Authoritative references: [Endpoints overview](https://fr24api.flightradar24.com/docs/endpoints/overview), [Flight Summary](https://fr24api.flightradar24.com/docs/endpoints/flight-summary).
 
 ---
 
-## 11. UX and visual design (Streamlit Phase 1)
+## 11. UX and visual design
 
 ### 11.1 Information architecture
 
-- **Page A:** Airport analytics  
-- **Page B:** Flight number analytics  
-- **Sidebar:** date window, timezone display mode, optional “max rows” guard, API health note
+Single page, single input. No separate airport page. Route is always resolved through the flight number.
 
-Use Streamlit `st.navigation` or multipage app pattern.
+```
+[Search bar: flight number input + Submit]
+        ↓
+[Container 1: Flight history]
+[Container 2: Departure airport context]
+[Container 3: Arrival airport context]
+```
 
-### 11.2 Layout pattern (each page)
+### 11.2 Layout pattern
 
-1. **Title + one-sentence value prop**
-2. **Controls row** (inputs)
-3. **KPI strip** (3–5 `st.metric` tiles)
-4. **Primary chart** (time series or bar)
-5. **Secondary chart** (distribution or heatmap)
-6. **Detail table** (paginated or top-N)
-7. **Footer:** data coverage + UTC/local note + FR24 attribution
+1. **Search bar** — prominent at top; single text input, normalized on submit (trim + uppercase).
+2. **Container 1 — Flight history**
+   - Header: flight number + resolved route (e.g. "KE41 · ICN → JFK")
+   - Summary strip: median duration · most common aircraft type · route mode
+   - Table: last 10 legs with takeoff, landing, duration, type, registration, taxi-in, taxi-out (coverage-flagged)
+3. **Container 2 — Departure airport context**
+   - Header: departure airport name + IATA/ICAO + city/country
+   - Hourly departures bar chart (last 24h in local TZ)
+   - Table: recent departure rows
+   - Coverage footer
+4. **Container 3 — Arrival airport context**
+   - Header: arrival airport name + IATA/ICAO + city/country
+   - Hourly arrivals bar chart (last 24h in local TZ)
+   - Table: recent arrival rows
+   - Coverage footer
+
+All three containers load in parallel after the flight history resolves the route.
 
 ### 11.3 Visual style
 
 - **Color:** one neutral background, one accent (blue or teal), semantic red only for errors.
-- **Typography:** default Streamlit; emphasize numbers in metrics.
-- **Charts:** Plotly for interactivity (hover tooltips mandatory).
-- **Copy:** avoid “delay”; prefer “operational timing” and “proxy.”
+- **Typography:** modern sans-serif; emphasize numbers in summary tiles.
+- **Charts:** interactive bar charts with hover tooltips (hours labeled in local TZ with UTC offset noted).
+- **Copy:** avoid "delay"; prefer "operational timing," "taxi-time proxy," "observed duration."
 
-### 11.4 Accessibility (honest)
+### 11.4 Accessibility
 
-Streamlit is weaker on WCAG than custom front ends. **Phase 2** should improve keyboard nav and contrast. v1: keep high contrast theme and descriptive labels.
-
-### 11.5 AI narrative panel (Phase 3)
-
-- **Placement:** Below the primary charts or in a **right-hand expander** so the **data remains primary**; AI is **supporting**.
-- **Visual:** Distinct panel (e.g. tinted background) with icon + “AI-generated” label.
-- **Content pattern:** Bullets + **inline references** to numbers (“Diversion rate **2.1%** over **n=480** legs…”).
-- **Empty / low coverage:** If `n` is tiny or diversion denominator small, AI prompt must include **warning**; UI shows “interpret with caution.”
+- High-contrast theme; descriptive ARIA labels on charts.
+- Keyboard navigable search input and table rows.
+- All time values labeled with timezone (local + UTC equivalent).
 
 ---
 
-## 12. Technical architecture (Phase 1)
+## 12. Technical architecture
 
 ```mermaid
 flowchart TB
-  subgraph ui [Streamlit_UI]
-    P1[Airport_page]
-    P2[Flight_page]
+  subgraph ui [Next.js_UI]
+    I[Flight_number_input]
   end
-  subgraph domain [Python_domain_modules]
-    Q[query_builders]
-    C[fr24_client]
-    M[metrics_pandas]
-    K[cache_layer]
+  subgraph apis [Next.js_API_Routes]
+    FA[GET_/api/flight]
+    AA[GET_/api/airport_dep]
+    AB[GET_/api/airport_arr]
   end
-  P1 --> Q
-  P2 --> Q
-  Q --> C
-  C --> FR24[FR24_API]
-  C --> M
-  M --> P1
-  M --> P2
-  Q --> K
-  C --> K
+  subgraph fr24 [FR24_API]
+    FS[flight-summary/full]
+    FE[historic/flight-events/light]
+    AP[static/airports/full]
+  end
+  I --> FA
+  FA --> FS
+  FA --> FE
+  FA -->|"resolve orig_icao + dest_icao"| AA
+  FA -->|"resolve orig_icao + dest_icao"| AB
+  AA --> FS
+  AA --> AP
+  AB --> FS
+  AB --> AP
 ```
 
-**Module layout (recommended):**
+**Route resolution flow:**
 
-- `fr24_analytics/client.py` — auth headers, retries, rate limit handling  
-- `fr24_analytics/queries.py` — builds parameters for summary/events/tracks  
-- `fr24_analytics/normalize.py` — JSON → data frames  
-- `fr24_analytics/metrics.py` — aggregations + coverage stats  
-- `streamlit_app/` — pages only; no FR24 details embedded
-
-**Phase 3 add-on (conceptual):**
-
-- `fr24_analytics/narrative_payload.py` — builds **serializable** dict from current DataFrames/metrics for LLM.  
-- `fr24_analytics/llm_client.py` — thin wrapper around provider SDK; timeouts and retries.  
-- Streamlit: `st.button("Explain this view")` → build payload → call LLM → stream or show result.
-
-```mermaid
-flowchart LR
-  subgraph phase3 [Phase3_AI_narrative]
-    M[metrics_snapshot]
-    N[narrative_payload_builder]
-    L[LLM_API]
-    U[Streamlit_AI_panel]
-    M --> N
-    N --> L
-    L --> U
-  end
-```
+1. `GET /api/flight?flight=KE41` → fetches last 10 legs → returns legs + resolved `orig_icao` + `dest_icao`.
+2. UI fires `GET /api/airport?airport=RKSI&direction=dep` and `GET /api/airport?airport=KJFK&direction=arr` in parallel.
+3. Airport route uses directional `airports=outbound:ICAO` or `airports=inbound:ICAO` based on `direction` param.
 
 ---
 
 ## 13. Caching, pagination, and cost controls
 
-- **Cache:** in-process LRU or TTL cache keyed by `(endpoint, params)` with TTL **5–15 minutes**.
-- **Pagination:** loop with sorted keys (`first_seen` asc/desc per docs) respecting `limit`.
-- **Guards:** hard cap on legs pulled per user action; show “refine window” message.
-- **Tracks:** never auto-fetch for all rows.
+- **Cache:** in-process TTL cache keyed by `(endpoint, params)` with TTL **30 minutes** for flight and airport data.
+- **Flight history:** hard cap at **10 legs** per user action; do not paginate further automatically.
+- **Airport directional fetch:** window default **24h** (configurable via `DEV_WINDOW_HOURS`); row cap **300** per time slice with binary-split pagination if limit is hit.
+- **Gate events:** batch by `fr24_id` in groups of 10; respect 400ms minimum gap between requests; retry once on 429 after 62s.
+- **Tracks:** never auto-fetch for all rows; user must click per leg.
 
 ---
 
 ## 14. Acceptance criteria (MVP)
 
-### Airport MVP
+### Flight history container
 
-- Given a selected airport and 7-day window, app shows **non-empty** movements chart when FR24 returns data.
-- Given zero results, app shows **empty state** without crashing.
-- Airline chart uses **operated_as** by default and explains **painted_as** in tooltip/help.
+- Given a valid flight number with history, the container shows at least `fr24_id`, origin, destination, takeoff time, landing time, and aircraft type.
+- Given a flight number with taxi event coverage, taxi-in and taxi-out values appear; where absent, coverage % is shown rather than an error.
+- Given malformed input, app shows a validation message (not a stack trace).
+- Median duration and route mode summary tiles are populated.
 
-### Flight MVP
+### Departure airport context container
 
-- Given a valid flight number with history, app shows **table** with at least `fr24_id`, origin, dest, and one time column.
-- Given malformed input, app shows **validation message** (not stack trace).
+- Given a resolved `orig_icao`, the container shows a departures-per-hour chart for the last 24h and a recent departures table.
+- Container uses `airports=outbound:ICAO` filter (not `both`); no arrivals appear in this section.
+- Airport name, IATA, city, country, and timezone are displayed.
+
+### Arrival airport context container
+
+- Given a resolved `dest_icao`, the container shows an arrivals-per-hour chart for the last 24h and a recent arrivals table.
+- Container uses `airports=inbound:ICAO` filter (not `both`); no departures appear in this section.
+- Airport name, IATA, city, country, and timezone are displayed.
 
 ### Global
 
-- Token is read only from **environment variable**; app runs without printing token.
-
-### Phase 3 — AI narrative (late)
-
-- Given a populated airport view, **Explain this view** returns text that references **at least two** numeric values from the visible KPI payload (e.g. diversion %, `n`, peak hour).
-- Disclaimer and **Regenerate** are always visible; no LLM API key in client bundle.
+- Token is read only from **environment variable**; app runs without printing the token.
+- All three containers load from a single flight number entry; the user does not need to enter airport codes.
+- Empty states display without crashing when FR24 returns zero rows.
 
 ---
 
@@ -418,13 +406,10 @@ flowchart LR
 
 | Phase | Scope |
 |-------|--------|
-| **MVP 0.1** | Airport page: movements/day + top airlines + top routes; Flight page: legs table + basic summary. |
-| **MVP 0.2** | Aircraft mix + diversion rate + coverage footers; optional CSV export. |
-| **MVP 0.3** | Historic events integration for taxi proxies + heatmap peak hour. |
-| **Phase 2** | External web UI + auth optional + formal API + deploy hardening; reuse `fr24_analytics` package; static tooltips and “What is this metric?” copy (no LLM required). |
-| **Phase 3 — late product / interpretability** | **AI narrative agent:** grounded summaries for **Airport** and **Flight** views; disclaimers; server-side LLM; rate limits + caching; optional follow-up Q&A within guardrails. Depends on stable metric schema from 0.2–0.3. **Rationale:** niche metrics (e.g. diversion rate, peak hour, taxi proxies) need **synthesis** so Alex-style users get the “so what” without becoming data experts. |
-
-**Phase 3 success check (product):** User can answer, after reading the panel, *why* a high diversion rate **might** matter (operational variability, not a guaranteed personal outcome) and *what* peak hour represents **for their selected airport and date window** (busiest clock hour by movement count, with UTC/local stated).
+| **Baseline (current)** | Next.js app with single-page flight history table + airport container using `both:ICAO`. Single flight number input. |
+| **v1.0** | Three containers: flight history (last 10 legs) + directional departure context + directional arrival context. Taxi-in/out enrichment for flight history. Summary tiles per container. |
+| **v1.1** | Coverage footers on all containers. UTC + airport local time display. Hourly chart for both airport containers. |
+| **v1.2** | Aircraft type and registration in airport context tables. Optional CSV export for flight history. |
 
 ---
 
@@ -432,61 +417,19 @@ flowchart LR
 
 | Risk | Mitigation |
 |------|------------|
-| Credit burn from naive loops | Cache, limits, count endpoint where useful, user confirmation for expensive actions. |
-| Misinterpretation as official delays | Clear copy + FAQ panel. |
-| Users expect Google-style “next departure” hero | Lead with strategy in UI: **patterns and mix** first; link out for timetables; align with Section 2.2 pillar 4. |
-| Sparse gate events | Always show coverage % for taxi proxies. |
-| Flight number ambiguity | Show airline code assumption; allow user to narrow by airline ICAO/IATA later. |
-| **AI hallucination / overclaim** | Ground on JSON payload only; system prompt + post-check for forbidden phrases; show disclaimer; small-N warnings in payload. |
-| **AI cost / abuse** | Rate limit; cache; optional feature flag; require login later if public abuse. |
-| **Privacy / data to LLM** | Send **aggregates** only; document provider; opt-in where required by policy. |
+| Credit burn from naive loops | Cache, row caps, count endpoint where useful, user confirmation for tracks. |
+| Misinterpretation as official delays | Clear copy + coverage footers + FAQ panel. |
+| Flight number resolves ambiguously (same number, multiple carriers) | Show airline code assumption in container header; allow user to narrow later. |
+| Route resolution fails (no completed legs in window) | Empty state with guidance to try a longer lookback or verify flight number. |
+| Sparse gate events for taxi proxies | Always show coverage % for taxi-in/out columns. |
+| Directional FR24 filter (`outbound:` / `inbound:`) behaves differently from `both:` | Validate in engineering spike before v1.0 ships; document any behavioral gaps in §17. |
 
 ---
 
 ## 17. Open decisions (record when chosen)
 
-- Public deployment vs private demo (abuse risk).
-- Airport list: bundled top 200 vs full searchable catalog.
-- Whether v1 includes **any** track fetching.
-- **Phase 3:** LLM vendor (OpenAI, Anthropic, Azure OpenAI, local model); streaming vs batch; whether follow-up chat is v3.0 or v3.1; retention of prompts/responses for debugging (default off or ≤30 days).
+- **Public deployment vs private demo** — **Decided: private, invitation-only.** The site is gated behind a shared `SITE_PASSWORD` (set via environment variable). Additionally, `/api/flight` and `/api/airport` enforce a 5-requests-per-minute per-IP rate limit to prevent FR24 credit exhaustion, and `/api/access` limits password attempts to 5 per 15 minutes per IP.
+- Whether to expose a `lookbackDays` control to the user for flight history (currently env-driven).
+- Whether the airport context window (currently 24h) should be user-selectable or fixed.
+- **Directional airport API filter:** confirmed that FR24 uses `airports=outbound:ICAO` and `airports=inbound:ICAO` (not `dep:` / `arr:`). Validated against `both:ICAO` — directional filters are now in production.
 
----
-
-## 18. Late-stage: AI narrative and synthesis agent (specification)
-
-### 18.1 Problem statement
-
-The product’s strength is **niche, tracking-derived analytics** that Google and airline sites do not show. That same strength creates a **comprehension gap**: users see diversion rates, peak hours, and ICAO-heavy tables but may not infer **practical meaning** or **limitations** without help.
-
-### 18.2 Solution outline
-
-An **AI agent** (implemented as a **server-side** call to an LLM) receives a **structured, bounded payload** of numbers and labels **already displayed** on the current screen, plus **metric definitions** from Section 9. It returns a **short narrative** that:
-
-- Explains **what the metrics mean** in plain language.
-- Highlights **caveats** (sample size, UTC vs local, incomplete tracking).
-- Addresses exemplar questions such as: *If diversion rate is high for this airport and window, what should I think about?* *Which hour had the most movements, and what does that imply about how “busy” the airport was during my selected period?*
-
-The model must **not** fabricate flight-specific predictions or external facts (weather, NOTAMs, strikes) unless clearly separated as **general education** and not asserted for the user’s query.
-
-### 18.3 Implementation notes
-
-- **Grounding contract:** Prompt template includes `METRICS_JSON`, `DEFINITIONS`, `USER_CONTEXT` (airport code, date range, movement filter). Model instructed: every factual claim must map to a field in `METRICS_JSON`.
-- **Safety copy:** Fixed footer: exploratory only; not for operational decisions.
-- **Testing:** Golden tests on synthetic payloads (high/low diversion, tiny N, missing coverage) to catch overconfident wording.
-
-### 18.4 Relationship to roadmap
-
-This capability is **explicitly Phase 3** so that: (1) metric definitions and aggregates stabilize first; (2) FR24 and Streamlit core paths are debugged without LLM variability; (3) compliance and cost controls can be designed deliberately.
-
----
-
-## 19. Appendix — Streamlit vs full web (effort, not zero)
-
-| Layer | Reuse when moving to “industry-grade” |
-|-------|----------------------------------------|
-| FR24 query + metrics + tests | **High** if kept in `fr24_analytics/` |
-| Streamlit pages | **Low** (rewritten as React/Next or similar) |
-| Auth, SEO, marketing, monitoring | **New** in Phase 2 |
-| **AI narrative layer** | **Medium reuse:** `narrative_payload` + prompt contracts stay in Python; UI moves from Streamlit expander to web component; LLM integration portable |
-
-This appendix answers: **Streamlit is the fastest MVP**; **you do not restart from zero** if you isolate domain logic early. The **AI layer** attaches to **stable metric outputs**, so it ships **after** core analytics and migrates with the same payload schema.

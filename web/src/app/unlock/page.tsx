@@ -11,9 +11,9 @@ function UnlockContent() {
   return (
     <main className="gate">
       <section className="gate-card">
-        <p className="gate-kicker">Protected site</p>
+        <p className="gate-kicker">FlightSnooper</p>
         <h1 className="title">Enter password</h1>
-        <p className="subtitle">This website is gated by a single shared password.</p>
+        <p className="subtitle">This site is shared by invite only. Enter the password to continue.</p>
 
         <form action="/api/access" method="POST" className="gate-form">
           <input type="hidden" name="next" value={nextPath} />

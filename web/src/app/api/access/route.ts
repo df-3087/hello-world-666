@@ -6,8 +6,23 @@ import {
   isSiteAccessEnabled,
   matchesSitePassword,
 } from "@/lib/site-access";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
+  const ip = getClientIp(req);
+  const { allowed, retryAfterMs } = checkRateLimit(`access:${ip}`, {
+    maxRequests: 5,
+    windowMs: 15 * 60 * 1000,
+  });
+
+  if (!allowed) {
+    const retryAfterSec = Math.ceil(retryAfterMs / 1000);
+    return new NextResponse("Too many attempts. Please wait before trying again.", {
+      status: 429,
+      headers: { "Retry-After": String(retryAfterSec) },
+    });
+  }
+
   const formData = await req.formData();
   const password = String(formData.get("password") || "");
   const nextPath = getSafeNextPath(String(formData.get("next") || req.nextUrl.searchParams.get("next") || "/"));
