@@ -17,6 +17,7 @@ type FlightRow = {
   type?: string;
   reg?: string;
   duration_min?: number | null;
+  actual_distance?: number | null;
   taxi_out_min?: number | null;
   taxi_in_min?: number | null;
   runway_takeoff?: string;
@@ -32,6 +33,8 @@ type FlightPayload = {
   route: { orig_icao: string; orig_iata?: string; dest_icao: string; dest_iata?: string } | null;
   summary: {
     medianDurationMin: number | null;
+    medianTaxiOutMin: number | null;
+    medianTaxiInMin: number | null;
     mostCommonType: string | null;
     routeMode: string | null;
   };
@@ -178,6 +181,8 @@ async function buildFlightPayload(flight: string, lookbackDays: number): Promise
     : null;
 
   const durations = legs.map((l) => l.duration_min).filter((d): d is number => d !== null && d !== undefined);
+  const taxiOuts = legs.map((l) => l.taxi_out_min).filter((d): d is number => d !== null && d !== undefined);
+  const taxiIns = legs.map((l) => l.taxi_in_min).filter((d): d is number => d !== null && d !== undefined);
   const types = legs.map((l) => l.type).filter((t): t is string => !!t);
   const routes = legs
     .filter((l) => l.orig_icao && l.dest_icao)
@@ -189,6 +194,8 @@ async function buildFlightPayload(flight: string, lookbackDays: number): Promise
     route,
     summary: {
       medianDurationMin: median(durations),
+      medianTaxiOutMin: median(taxiOuts),
+      medianTaxiInMin: median(taxiIns),
       mostCommonType: mostCommon(types),
       routeMode: mostCommon(routes),
     },

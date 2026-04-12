@@ -40,6 +40,12 @@ type FlightRow = {
   fr24_id?: string;
   type?: string;
   painted_as?: string;
+  /** Flight/service category returned by flight-summary/full (e.g. "Passenger", "Cargo"). */
+  category?: string | null;
+  /** Actual ground distance flown in km, from flight-summary/full. */
+  actual_distance?: number | null;
+  /** UTC datetime when the aircraft was last detected for this leg (from FR24). */
+  last_seen?: string | null;
   airline_name?: string;
   airline_iata?: string;
   runway_takeoff?: string;
@@ -448,16 +454,13 @@ async function buildAirportPayload(airport: string, direction: Direction): Promi
 }
 
 function toHourSeries(rows: FlightRow[], col: "datetime_landed" | "datetime_takeoff", tz: string, start: Date, end: Date) {
-  const byHour = Array.from({ length: 24 }, (_, i) => ({
-    label: new Date(start.getTime() + i * 3600 * 1000).toLocaleString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-      weekday: "short",
-      timeZone: tz,
-      hour12: false,
-    }),
-    value: 0,
-  }));
+  const byHour = Array.from({ length: 24 }, (_, i) => {
+    const slotStart = new Date(start.getTime() + i * 3600 * 1000);
+    const slotEnd = new Date(start.getTime() + (i + 1) * 3600 * 1000);
+    const fmt = (d: Date) => d.toLocaleString("en-US", { hour: "2-digit", minute: "2-digit", timeZone: tz, hour12: false });
+    const weekday = slotStart.toLocaleString("en-US", { weekday: "short", timeZone: tz });
+    return { label: `${weekday}, ${fmt(slotStart)}–${fmt(slotEnd)}`, value: 0 };
+  });
 
   for (const row of rows) {
     const ts = parseFr24Utc(row[col]);

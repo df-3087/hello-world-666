@@ -27,8 +27,8 @@ type AirportPayload = {
   departuresSeries: SeriesPoint[];
   departureRunways: RunwayChartPoint[];
   arrivalRunways: RunwayChartPoint[];
-  arrivals: Record<string, string | null | undefined>[];
-  departures: Record<string, string | null | undefined>[];
+  arrivals: Record<string, string | number | null | undefined>[];
+  departures: Record<string, string | number | null | undefined>[];
   error?: string;
 };
 
@@ -45,6 +45,7 @@ type FlightLeg = {
   type?: string | null;
   reg?: string | null;
   duration_min?: number | null;
+  actual_distance?: number | null;
   taxi_out_min?: number | null;
   taxi_in_min?: number | null;
   runway_takeoff?: string | null;
@@ -57,6 +58,8 @@ type FlightPayload = {
   route: { orig_icao: string; orig_iata?: string; dest_icao: string; dest_iata?: string } | null;
   summary: {
     medianDurationMin: number | null;
+    medianTaxiOutMin: number | null;
+    medianTaxiInMin: number | null;
     mostCommonType: string | null;
     routeMode: string | null;
   };
@@ -84,6 +87,13 @@ function toLocalTime(utcStr: string | null | undefined, tz: string): string {
     minute: "2-digit",
     hour12: false,
   });
+}
+
+function fmtKm(km: number | string | null | undefined): string {
+  if (km === null || km === undefined || km === "") return "--";
+  const n = typeof km === "string" ? parseFloat(km) : km;
+  if (!isFinite(n)) return "--";
+  return `${Math.round(n * 0.621371).toLocaleString()} mi`;
 }
 
 function fmtMinutes(min: number | null | undefined): string {
@@ -114,6 +124,7 @@ const COLUMN_HELP = {
     depRwy: "Dep RWY: runway the flight took off from on this leg (from FR24).",
     arrRwy: "Arr RWY: runway the flight landed on for this leg (from FR24).",
     duration: "Gate-to-gate block time for this leg (wheels-off to wheels-on), when both times exist.",
+    distance: "Actual ground distance flown for this leg, in miles (from FR24 flight-summary/full).",
     type: "ICAO aircraft type designator (e.g. B78X, A321).",
     reg: "Aircraft registration (tail number) for this leg.",
     taxiOut: "Taxi-out: minutes from gate departure to takeoff, when gate and takeoff times exist.",
@@ -121,21 +132,28 @@ const COLUMN_HELP = {
   },
   departures: {
     flight: "Airline name and flight number for this movement.",
+    callsign: "ATC callsign used by this flight (may differ from the marketed flight number for codeshares or charters).",
     to: "Destination airport for this departure (code, city, and country).",
     gateDep: "Gate departure time (pushback / off-block) in this airport’s local time, when reported.",
     takeoff: "Takeoff (wheels-up) time in this airport’s local time.",
     depRwy: "Dep RWY: runway this flight used for takeoff at this airport.",
     taxiOut: "Taxi-out: time from gate departure to wheels-up for this flight.",
     type: "ICAO aircraft type designator.",
+    category: "Service category reported by FR24 (e.g. Passenger, Cargo, Business Aviation).",
+    distance: "Actual ground distance flown, in km (from FR24 flight-summary/full).",
+    lastSeen: "Last time this flight was detected by FR24 tracking for this leg (UTC, shown in local time).",
   },
   arrivals: {
     flight: "Airline name and flight number for this movement.",
+    callsign: "ATC callsign used by this flight (may differ from the marketed flight number for codeshares or charters).",
     from: "Origin airport for this arrival (code, city, and country).",
     landed: "Landing (wheels-on) time in this airport’s local time.",
     gateArr: "Gate arrival time (on-block) in this airport’s local time, when reported.",
     arrRwy: "Arr RWY: runway this flight used for landing at this airport.",
     taxiIn: "Taxi-in: time from wheels-down to gate arrival for this flight.",
     type: "ICAO aircraft type designator.",
+    category: "Service category reported by FR24 (e.g. Passenger, Cargo, Business Aviation).",
+    distance: "Actual ground distance flown, in km (from FR24 flight-summary/full).",
   },
   charts: {
     hourlyDep: "Departures in each local hour during the rolling window (count of takeoffs per hour bucket).",
@@ -145,6 +163,8 @@ const COLUMN_HELP = {
   },
   summary: {
     medianDuration: "Median block time (wheels-off to wheels-on) across legs in the lookback window.",
+    medianTaxiOut: "Median taxi-out time (gate departure to takeoff) across legs where gate event data is available.",
+    medianTaxiIn: "Median taxi-in time (landing to gate arrival) across legs where gate event data is available.",
     typicalAircraft: "Most common ICAO aircraft type across legs in the lookback window.",
   },
 } as const;
@@ -241,7 +261,7 @@ function RunwayBars({ title, points, headerTitle }: { title: string; points: Run
 
 /* ── airline flight cell ──────────────────────────────── */
 
-function FlightCell({ row }: { row: Record<string, string | null | undefined> }) {
+function FlightCell({ row }: { row: Record<string, string | number | null | undefined> }) {
   const flight = row.flight || row.callsign || "--";
   const name = row.airline_name;
 
@@ -404,6 +424,14 @@ export default function HomePage() {
               <span className="summary-label">Median duration</span>
               <span className="summary-value">{fmtMinutes(flightData.summary.medianDurationMin)}</span>
             </div>
+            <div className="summary-tile" title={COLUMN_HELP.summary.medianTaxiOut}>
+              <span className="summary-label">Median taxi-out</span>
+              <span className="summary-value">{fmtMinutes(flightData.summary.medianTaxiOutMin)}</span>
+            </div>
+            <div className="summary-tile" title={COLUMN_HELP.summary.medianTaxiIn}>
+              <span className="summary-label">Median taxi-in</span>
+              <span className="summary-value">{fmtMinutes(flightData.summary.medianTaxiInMin)}</span>
+            </div>
             <div className="summary-tile" title={COLUMN_HELP.summary.typicalAircraft}>
               <span className="summary-label">Typical aircraft</span>
               <span className="summary-value">{flightData.summary.mostCommonType || "--"}</span>
@@ -416,15 +444,16 @@ export default function HomePage() {
                 <tr>
                   <th title={COLUMN_HELP.flightHistory.date}>Date</th>
                   <th title={COLUMN_HELP.flightHistory.route}>Route</th>
-                  <th title={COLUMN_HELP.flightHistory.takeoff}>Takeoff</th>
-                  <th title={COLUMN_HELP.flightHistory.landing}>Landing</th>
-                  <th title={COLUMN_HELP.flightHistory.depRwy}>Dep RWY</th>
-                  <th title={COLUMN_HELP.flightHistory.arrRwy}>Arr RWY</th>
                   <th title={COLUMN_HELP.flightHistory.duration}>Duration</th>
+                  <th title={COLUMN_HELP.flightHistory.distance}>Distance</th>
+                  <th title={COLUMN_HELP.flightHistory.taxiOut}>Taxi-out</th>
+                  <th title={COLUMN_HELP.flightHistory.takeoff}>Takeoff</th>
+                  <th title={COLUMN_HELP.flightHistory.depRwy}>Dep RWY</th>
+                  <th title={COLUMN_HELP.flightHistory.landing}>Landing</th>
+                  <th title={COLUMN_HELP.flightHistory.arrRwy}>Arr RWY</th>
+                  <th title={COLUMN_HELP.flightHistory.taxiIn}>Taxi-in</th>
                   <th title={COLUMN_HELP.flightHistory.type}>Type</th>
                   <th title={COLUMN_HELP.flightHistory.reg}>Reg</th>
-                  <th title={COLUMN_HELP.flightHistory.taxiOut}>Taxi-out</th>
-                  <th title={COLUMN_HELP.flightHistory.taxiIn}>Taxi-in</th>
                 </tr>
               </thead>
               <tbody>
@@ -435,15 +464,16 @@ export default function HomePage() {
                     <tr key={`${leg.fr24_id || "f"}-${i}`}>
                       <td>{leg.datetime_takeoff ? new Date(leg.datetime_takeoff.endsWith("Z") ? leg.datetime_takeoff : `${leg.datetime_takeoff}Z`).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "--"}</td>
                       <td>{`${leg.orig_iata || leg.orig_icao || "?"} → ${leg.dest_iata || leg.dest_icao || "?"}`}</td>
-                      <td>{toLocalTime(leg.datetime_takeoff, tz)}</td>
-                      <td>{toLocalTime(leg.datetime_landed, arrTz)}</td>
-                      <td>{leg.runway_takeoff || "--"}</td>
-                      <td>{leg.runway_landed || "--"}</td>
                       <td>{fmtMinutes(leg.duration_min)}</td>
+                      <td>{fmtKm(leg.actual_distance)}</td>
+                      <td>{leg.taxi_out_min != null ? `${leg.taxi_out_min}m` : "--"}</td>
+                      <td>{toLocalTime(leg.datetime_takeoff, tz)}</td>
+                      <td>{leg.runway_takeoff || "--"}</td>
+                      <td>{toLocalTime(leg.datetime_landed, arrTz)}</td>
+                      <td>{leg.runway_landed || "--"}</td>
+                      <td>{leg.taxi_in_min != null ? `${leg.taxi_in_min}m` : "--"}</td>
                       <td>{leg.type || "--"}</td>
                       <td>{leg.reg || "--"}</td>
-                      <td>{leg.taxi_out_min != null ? `${leg.taxi_out_min}m` : "--"}</td>
-                      <td>{leg.taxi_in_min != null ? `${leg.taxi_in_min}m` : "--"}</td>
                     </tr>
                   );
                 })}
@@ -467,7 +497,7 @@ export default function HomePage() {
               <span>Total departures (24h)</span>
               <span className="metric">{depAirportData.summary.departures24h}</span>
             </div>
-            <div className="kpi" title="Local hour with the most departures in the rolling window; number in parentheses is the count for that hour.">
+            <div className="kpi" title="One-hour interval with the most departures in the rolling window (local time). Number in parentheses is the flight count for that interval.">
               <span>Peak hour</span>
               <span className="metric">{depPeak?.label ?? "--"} ({depPeak?.value ?? 0})</span>
             </div>
@@ -482,16 +512,17 @@ export default function HomePage() {
           </div>
 
           <div className="table-scroll" style={{ marginTop: 12 }}>
-            <table>
+            <table className="airport-table dep-table">
               <thead>
                 <tr>
                   <th className="col-flight" title={COLUMN_HELP.departures.flight}>Flight</th>
                   <th title={COLUMN_HELP.departures.to}>To</th>
+                  <th title={COLUMN_HELP.departures.type}>Type</th>
+                  <th title={COLUMN_HELP.departures.category}>Category</th>
                   <th title={COLUMN_HELP.departures.gateDep}>Gate Dep (local)</th>
                   <th title={COLUMN_HELP.departures.takeoff}>Takeoff (local)</th>
-                  <th title={COLUMN_HELP.departures.depRwy}>Dep RWY</th>
                   <th title={COLUMN_HELP.departures.taxiOut}>Taxi-out</th>
-                  <th title={COLUMN_HELP.departures.type}>Type</th>
+                  <th title={COLUMN_HELP.departures.depRwy}>Dep RWY</th>
                 </tr>
               </thead>
               <tbody>
@@ -499,11 +530,12 @@ export default function HomePage() {
                   <tr key={`${r.fr24_id || "d"}-${i}`}>
                     <td className="col-flight"><FlightCell row={r} /></td>
                     <td>{r.dest_label || r.dest_iata || r.dest_icao || "--"}</td>
-                    <td>{toLocalTime(r.datetime_gate_departure, depAirportData.airport.timezone)}</td>
-                    <td>{toLocalTime(r.datetime_takeoff, depAirportData.airport.timezone)}</td>
-                    <td>{r.runway_takeoff || "--"}</td>
-                    <td>{elapsedMinutes(r.datetime_gate_departure, r.datetime_takeoff)}</td>
                     <td>{r.type || "--"}</td>
+                    <td>{r.category || "--"}</td>
+                    <td>{toLocalTime(r.datetime_gate_departure as string | null | undefined, depAirportData.airport.timezone)}</td>
+                    <td>{toLocalTime(r.datetime_takeoff as string | null | undefined, depAirportData.airport.timezone)}</td>
+                    <td>{elapsedMinutes(r.datetime_gate_departure as string | null | undefined, r.datetime_takeoff as string | null | undefined)}</td>
+                    <td>{r.runway_takeoff || "--"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -526,7 +558,7 @@ export default function HomePage() {
               <span>Total arrivals (24h)</span>
               <span className="metric">{arrAirportData.summary.arrivals24h}</span>
             </div>
-            <div className="kpi" title="Local hour with the most arrivals in the rolling window; number in parentheses is the count for that hour.">
+            <div className="kpi" title="One-hour interval with the most arrivals in the rolling window (local time). Number in parentheses is the flight count for that interval.">
               <span>Peak hour</span>
               <span className="metric">{arrPeak?.label ?? "--"} ({arrPeak?.value ?? 0})</span>
             </div>
@@ -541,16 +573,17 @@ export default function HomePage() {
           </div>
 
           <div className="table-scroll" style={{ marginTop: 12 }}>
-            <table>
+            <table className="airport-table arr-table">
               <thead>
                 <tr>
                   <th className="col-flight" title={COLUMN_HELP.arrivals.flight}>Flight</th>
                   <th title={COLUMN_HELP.arrivals.from}>From</th>
+                  <th title={COLUMN_HELP.arrivals.type}>Type</th>
+                  <th title={COLUMN_HELP.arrivals.category}>Category</th>
                   <th title={COLUMN_HELP.arrivals.landed}>Landed (local)</th>
                   <th title={COLUMN_HELP.arrivals.gateArr}>Gate Arr (local)</th>
-                  <th title={COLUMN_HELP.arrivals.arrRwy}>Arr RWY</th>
                   <th title={COLUMN_HELP.arrivals.taxiIn}>Taxi-in</th>
-                  <th title={COLUMN_HELP.arrivals.type}>Type</th>
+                  <th title={COLUMN_HELP.arrivals.arrRwy}>Arr RWY</th>
                 </tr>
               </thead>
               <tbody>
@@ -558,11 +591,12 @@ export default function HomePage() {
                   <tr key={`${r.fr24_id || "a"}-${i}`}>
                     <td className="col-flight"><FlightCell row={r} /></td>
                     <td>{r.orig_label || r.orig_iata || r.orig_icao || "--"}</td>
-                    <td>{toLocalTime(r.datetime_landed, arrAirportData.airport.timezone)}</td>
-                    <td>{toLocalTime(r.datetime_gate_arrival, arrAirportData.airport.timezone)}</td>
-                    <td>{r.runway_landed || "--"}</td>
-                    <td>{elapsedMinutes(r.datetime_landed, r.datetime_gate_arrival)}</td>
                     <td>{r.type || "--"}</td>
+                    <td>{r.category || "--"}</td>
+                    <td>{toLocalTime(r.datetime_landed as string | null | undefined, arrAirportData.airport.timezone)}</td>
+                    <td>{toLocalTime(r.datetime_gate_arrival as string | null | undefined, arrAirportData.airport.timezone)}</td>
+                    <td>{elapsedMinutes(r.datetime_landed as string | null | undefined, r.datetime_gate_arrival as string | null | undefined)}</td>
+                    <td>{r.runway_landed || "--"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -574,6 +608,15 @@ export default function HomePage() {
           </div>
         </section>
       )}
+      <footer className="site-footer">
+        <p className="site-footer-disclaimer">
+          Data provided by{" "}
+          <a href="https://www.flightradar24.com" target="_blank" rel="noopener noreferrer">Flightradar24</a>.
+          {" "}For informational purposes only. Not affiliated with Flightradar24, any airline, or any airport authority.
+          {" "}Data may be incomplete or delayed — do not use for flight planning or safety-critical decisions.
+        </p>
+        <p className="site-footer-credit">Made with ❤️ by 🍔</p>
+      </footer>
     </main>
   );
 }

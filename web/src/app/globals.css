@@ -74,10 +74,11 @@ body {
 }
 
 .title-plane-img {
-  width: 52px;
-  height: 52px;
+  width: 40px;
+  height: 40px;
   object-fit: contain;
   flex-shrink: 0;
+  transform: rotate(45deg);
 }
 
 .title-gradient {
@@ -363,11 +364,61 @@ td.col-flight {
   vertical-align: top;
 }
 
+/* Airport tables: fixed layout shared base */
+table.airport-table {
+  table-layout: fixed;
+}
+
+/* Departures table — 8 columns: Flight | To | Type | Category | Gate Dep | Takeoff | Taxi-out | Dep RWY */
+table.dep-table th:nth-child(1), table.dep-table td:nth-child(1) { width: 12rem; } /* Flight */
+table.dep-table th:nth-child(2), table.dep-table td:nth-child(2) { width: 12rem; } /* To */
+table.dep-table th:nth-child(3), table.dep-table td:nth-child(3) { width: 5rem; }  /* Type */
+table.dep-table th:nth-child(4), table.dep-table td:nth-child(4) { width: 7rem; }  /* Category */
+table.dep-table th:nth-child(5), table.dep-table td:nth-child(5) { width: 8rem; }  /* Gate Dep */
+table.dep-table th:nth-child(6), table.dep-table td:nth-child(6) { width: 8rem; }  /* Takeoff */
+table.dep-table th:nth-child(7), table.dep-table td:nth-child(7) { width: 5rem; }  /* Taxi-out */
+table.dep-table th:nth-child(8), table.dep-table td:nth-child(8) { width: 5rem; }  /* Dep RWY */
+
+/* Arrivals table — 8 columns: Flight | From | Type | Category | Landed | Gate Arr | Taxi-in | Arr RWY */
+table.arr-table th:nth-child(1), table.arr-table td:nth-child(1) { width: 12rem; } /* Flight */
+table.arr-table th:nth-child(2), table.arr-table td:nth-child(2) { width: 12rem; } /* From */
+table.arr-table th:nth-child(3), table.arr-table td:nth-child(3) { width: 5rem; }  /* Type */
+table.arr-table th:nth-child(4), table.arr-table td:nth-child(4) { width: 7rem; }  /* Category */
+table.arr-table th:nth-child(5), table.arr-table td:nth-child(5) { width: 8rem; }  /* Landed */
+table.arr-table th:nth-child(6), table.arr-table td:nth-child(6) { width: 8rem; }  /* Gate Arr */
+table.arr-table th:nth-child(7), table.arr-table td:nth-child(7) { width: 5rem; }  /* Taxi-in */
+table.arr-table th:nth-child(8), table.arr-table td:nth-child(8) { width: 5rem; }  /* Arr RWY */
+
 td.col-flight .airline-cell {
-  flex-wrap: nowrap;
-  white-space: nowrap;
+  flex-wrap: wrap;
   max-width: 100%;
-  overflow-x: auto;
+}
+
+.site-footer {
+  margin-top: 32px;
+  padding: 16px 0 28px;
+  font-size: 11px;
+  color: var(--muted);
+  border-top: 1px solid #e8eaf0;
+}
+
+.site-footer-disclaimer {
+  margin: 0 0 6px;
+  line-height: 1.6;
+}
+
+.site-footer-disclaimer a {
+  color: var(--muted);
+  text-decoration: underline;
+}
+
+.site-footer-disclaimer a:hover {
+  color: var(--accent);
+}
+
+.site-footer-credit {
+  margin: 0;
+  text-align: right;
 }
 
 @media (max-width: 900px) {
