@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiDt, fr24Get } from "@/lib/fr24";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -204,6 +205,19 @@ async function buildFlightPayload(flight: string, lookbackDays: number): Promise
 }
 
 export async function GET(req: NextRequest) {
+  const ip = getClientIp(req);
+  const { allowed, retryAfterMs } = checkRateLimit(`flight:${ip}`, {
+    maxRequests: 5,
+    windowMs: 60 * 1000,
+  });
+  if (!allowed) {
+    const retryAfterSec = Math.ceil(retryAfterMs / 1000);
+    return NextResponse.json(
+      { error: "Rate limit exceeded. Please wait before making another request." },
+      { status: 429, headers: { "Retry-After": String(retryAfterSec) } }
+    );
+  }
+
   try {
     const flight = (req.nextUrl.searchParams.get("flight") || process.env.DEMO_FLIGHT || "KE41")
       .trim()

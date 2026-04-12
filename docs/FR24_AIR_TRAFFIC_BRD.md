@@ -4,13 +4,13 @@ This specification lives in-repo for version control and sharing. It covers the 
 
 ## Implementation checklist
 
-- [ ] Single flight number input drives all three reporting containers
-- [ ] Container 1 — Flight history: last 10 legs with takeoff/landing times, taxi-in/out, aircraft type, flight duration
-- [ ] Container 2 — Departure airport context: recent departures from origin airport (directional, `outbound:ICAO`)
-- [ ] Container 3 — Arrival airport context: recent arrivals at destination airport (directional, `inbound:ICAO`)
-- [ ] Resolve route from flight legs: derive `orig_icao` + `dest_icao` from most recent completed leg
-- [ ] Switch `/api/airport` from `airports=both:ICAO` to directional filters (`outbound:` / `inbound:`)
-- [ ] Coverage footers and data-quality labels on all three containers
+- [x] Single flight number input drives all three reporting containers
+- [x] Container 1 — Flight history: last 10 legs with takeoff/landing times, taxi-in/out, aircraft type, flight duration
+- [x] Container 2 — Departure airport context: recent departures from origin airport (directional, `outbound:ICAO`)
+- [x] Container 3 — Arrival airport context: recent arrivals at destination airport (directional, `inbound:ICAO`)
+- [x] Resolve route from flight legs: derive `orig_icao` + `dest_icao` from most recent completed leg
+- [x] Switch `/api/airport` from `airports=both:ICAO` to directional filters (`outbound:` / `inbound:`)
+- [x] Coverage footers and data-quality labels on all three containers
 
 ---
 
@@ -428,8 +428,8 @@ flowchart TB
 
 ## 17. Open decisions (record when chosen)
 
-- Public deployment vs private demo (abuse risk).
+- **Public deployment vs private demo** — **Decided: private, invitation-only.** The site is gated behind a shared `SITE_PASSWORD` (set via environment variable). Additionally, `/api/flight` and `/api/airport` enforce a 5-requests-per-minute per-IP rate limit to prevent FR24 credit exhaustion, and `/api/access` limits password attempts to 5 per 15 minutes per IP.
 - Whether to expose a `lookbackDays` control to the user for flight history (currently env-driven).
 - Whether the airport context window (currently 24h) should be user-selectable or fixed.
-- **Directional airport API filter:** confirmed that FR24 uses `airports=outbound:ICAO` and `airports=inbound:ICAO` (not `dep:` / `arr:`). Validate behavior vs `both:ICAO` on the Essential tier.
+- **Directional airport API filter:** confirmed that FR24 uses `airports=outbound:ICAO` and `airports=inbound:ICAO` (not `dep:` / `arr:`). Validated against `both:ICAO` — directional filters are now in production.
 

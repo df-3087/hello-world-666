@@ -374,12 +374,10 @@ export default function HomePage() {
     <main className="page">
       <h1 className="title">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/plane-top.png" alt="aircraft" className="title-plane-img" />
-        <span className="title-gradient">Know Your Flight</span>
-        {" "}
-        <span className="title-plain">Before You Fly</span>
+        <img src="/logo.svg" alt="FlightSnooper logo" className="title-plane-img" />
+        <span className="title-gradient">FlightSnooper</span>
       </h1>
-      <p className="subtitle">Drop in your flight number. We'll show you how it's been behaving, what aircraft to expect, which runways it favours, and the live pulse of both airports — all in one place.</p>
+      <p className="subtitle">Snoop on your flight before you board. Drop in a flight number and we'll show you how it's been behaving, what aircraft to expect, which runways it favours, and the live pulse of both airports — all in one place.</p>
 
       {/* ── Search ─────────────────────── */}
       <section className="card">
@@ -614,6 +612,11 @@ export default function HomePage() {
           <a href="https://www.flightradar24.com" target="_blank" rel="noopener noreferrer">Flightradar24</a>.
           {" "}For informational purposes only. Not affiliated with Flightradar24, any airline, or any airport authority.
           {" "}Data may be incomplete or delayed — do not use for flight planning or safety-critical decisions.
+        </p>
+        <p className="site-footer-disclaimer">
+          To protect API resources, this site enforces fair-use limits: flight and airport lookups are capped at{" "}
+          <strong>5 requests per minute</strong> per user.
+          Results are cached for up to 30 minutes — repeated searches for the same flight or airport will be served instantly from cache.
         </p>
         <p className="site-footer-credit">Made with ❤️ by 🍔</p>
       </footer>

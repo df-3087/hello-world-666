@@ -8,8 +8,8 @@ Deployment and runtime context for this project on Vercel.
 
 | Constraint | Pro plan |
 |---|---|
-| Serverless function max duration | 60 seconds |
-| `maxDuration` ceiling | 60 seconds |
+| Serverless function max duration | Up to 300 seconds (configured per-function via `maxDuration`) |
+| `maxDuration` ceiling | 300 seconds (Hobby plan caps at 60 seconds) |
 | Bandwidth | 1 TB/month |
 | Serverless function invocations | 1,000,000/month |
 | Edge network | Global CDN |
@@ -25,9 +25,9 @@ All API routes (`/api/airport`, `/api/flight`) use the **Node.js runtime** (`exp
 
 ### `maxDuration` setting
 
-`maxDuration = 60` is set on the airport route (`web/src/app/api/airport/route.ts`). This declares the function's maximum allowed execution time to Vercel. On the Pro plan the ceiling is 60 seconds; setting it higher has no effect.
+`maxDuration = 120` is set on both the airport route (`web/src/app/api/airport/route.ts`) and the flight route (`web/src/app/api/flight/route.ts`). This declares the function's maximum allowed execution time to Vercel. The Pro plan ceiling is 300 seconds; the Hobby plan caps at 60 seconds. **This project requires Pro or higher** — on Hobby, any request that triggers a FR24 429 retry (which sleeps 62s) will exceed the 60s cap and return a timeout error.
 
-The airport route can approach this limit on cold starts at busy airports because it chains multiple FR24 API calls with 400ms rate-limit gaps between them. The gate events fetch is the main variable cost — see `FR24_API_REFERENCE.md` for details on how this is controlled.
+The airport route can approach its 120s budget on cold starts at busy airports because it chains multiple FR24 API calls with 400ms rate-limit gaps between them. The gate events fetch is the main variable cost — see `FR24_API_REFERENCE.md` for details on how this is controlled.
 
 ---
 
@@ -64,6 +64,14 @@ VERCEL_WINDOW_HOURS → DEV_WINDOW_HOURS → default (24h)
 ```
 
 Value is clamped to the range [1, 24].
+
+---
+
+## User-Facing Rate Limiting
+
+Both `/api/flight` and `/api/airport` enforce a **5 requests per minute per IP** limit (implemented in `web/src/lib/rate-limit.ts` using an in-memory `Map`). Requests over the limit receive a `429` response with a `Retry-After` header. The `/api/access` (password gate) endpoint enforces a separate **5 attempts per 15 minutes per IP** limit.
+
+Like the cache, the rate-limit counters are **per function instance** — they reset on cold start and are not shared across Vercel instances. For a small audience this is acceptable; at higher scale, replace the in-memory map with Vercel KV or Upstash Redis.
 
 ---
 

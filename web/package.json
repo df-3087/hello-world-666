@@ -1,5 +1,5 @@
 {
-  "name": "fr24-web",
+  "name": "flightsnooper",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -9,8 +9,9 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@vercel/analytics": "^2.0.1",
     "dotenv": "17.2.3",
-    "next": "16.0.10",
+    "next": "^16.2.3",
     "react": "19.2.0",
     "react-dom": "19.2.0"
   },

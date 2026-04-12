@@ -435,7 +435,7 @@ The following new features could be built using data accessible on the Essential
 ### Credit efficiency decisions
 
 - **`flight-summary/full` instead of light** — the Full endpoint provides `orig_iata` and `dest_iata` in addition to ICAO codes, enabling user-friendly 3-letter airport codes in the UI. This costs ~50% more credits per historical row (3 vs 2) but eliminates the need for a static ICAO→IATA mapping.
-- **Fetch window** — controlled by `DEV_WINDOW_HOURS` env var (default 24h). Set to 3 locally to reduce credits burned per page reload during development. The `VERCEL_WINDOW_HOURS` env var overrides this on Vercel deployments.
+- **Fetch window** — controlled by `DEV_WINDOW_HOURS` env var (default 24h). Set to 3 locally to reduce credits burned per page reload during development.
 - **Cache TTL** — 30 minutes for both the airport route and the flight route. An in-memory `Map` with inflight deduplication prevents parallel requests from triggering double fetches.
 - **Gate events scoped to displayed rows** — `historic/flight-events/light` is called only for the 40 most recent arrivals/departures (sorted and sliced before the gate events fetch), not for every flight in the 24h window. This keeps gate event batches at ≤4 per stream instead of potentially 30+.
 
