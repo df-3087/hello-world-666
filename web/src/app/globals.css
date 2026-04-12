@@ -238,6 +238,15 @@ th[title],
   gap: 6px;
 }
 
+.airline-logo {
+  height: 36px;
+  width: auto;
+  max-width: 96px;
+  object-fit: contain;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
 .airline-name {
   color: var(--muted);
   font-size: 12px;
@@ -297,7 +306,7 @@ th[title],
 .runway-chart-row {
   display: grid;
   grid-template-columns: 2.75rem auto minmax(4rem, 1fr) 1.75rem;
-  gap: 8px 10px;
+  gap: 8px 4px;
   align-items: center;
   font-size: 12px;
   margin-bottom: 5px;

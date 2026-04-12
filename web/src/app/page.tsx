@@ -389,10 +389,8 @@ export default function HomePage() {
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={`/airlines/${iata}.png`}
-                  width={36}
-                  height={36}
                   alt={iata}
-                  style={{ borderRadius: 4, flexShrink: 0 }}
+                  className="airline-logo"
                   onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                 />
               ) : null;
