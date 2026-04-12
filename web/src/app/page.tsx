@@ -100,6 +100,15 @@ export default function HomePage() {
 
   const canLoad = airportCode.trim().length > 0 && flightNo.trim().length > 0;
 
+  const safeJson = async <T,>(res: Response, label: string): Promise<T> => {
+    const text = await res.text();
+    try {
+      return JSON.parse(text) as T;
+    } catch {
+      throw new Error(`${label} returned non-JSON (HTTP ${res.status}): ${text.slice(0, 200)}`);
+    }
+  };
+
   const load = async () => {
     if (!canLoad) return;
     setLoading(true);
@@ -109,8 +118,8 @@ export default function HomePage() {
         fetch(`/api/airport?airport=${encodeURIComponent(airportCode)}`),
         fetch(`/api/flight?flight=${encodeURIComponent(flightNo)}`),
       ]);
-      const airportJson = (await airportRes.json()) as AirportPayload;
-      const flightJson = (await flightRes.json()) as FlightPayload;
+      const airportJson = await safeJson<AirportPayload>(airportRes, "Airport API");
+      const flightJson = await safeJson<FlightPayload>(flightRes, "Flight API");
       if (!airportRes.ok) throw new Error(airportJson.error || "Airport request failed");
       if (!flightRes.ok) throw new Error(flightJson.error || "Flight request failed");
       setAirportData(airportJson);
