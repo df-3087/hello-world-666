@@ -50,4 +50,11 @@ The web app reads these values from your local environment. Only commit [`.env.e
 
 Notes:
 - The API routes use the Node.js runtime on Vercel.
-- `/api/airport` may take longer because it retries after FR24 rate limiting and keeps a short in-memory cache per server instance.
+- `/api/airport` may take longer because it retries after FR24 rate limiting and keeps a 30-minute in-memory cache per server instance.
+- Environment variables must be enabled for all three Vercel environments (Production, Preview, Development) — Preview deployments from feature branches will fail silently if variables are only set for Production.
+
+## Infrastructure reference
+
+See [`FR24_API_REFERENCE.md`](FR24_API_REFERENCE.md) for the full FR24 API endpoint menu, credit costs, and project-specific decisions.
+
+See [`VERCEL_REFERENCE.md`](VERCEL_REFERENCE.md) for Vercel plan constraints and deployment notes.
