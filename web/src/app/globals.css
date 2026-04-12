@@ -62,19 +62,41 @@ body {
 }
 
 .title {
-  margin: 0 0 6px;
-  font-size: 28px;
+  margin: 0 0 8px;
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.title-plane-img {
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.title-gradient {
+  background: linear-gradient(120deg, #0b63f6 0%, #6b36f6 50%, #e83e8c 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.title-plain {
+  color: var(--text);
 }
 
 .subtitle {
   margin: 0 0 20px;
   color: var(--muted);
-}
-
-.grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
+  font-size: 15px;
+  line-height: 1.6;
+  max-width: 620px;
 }
 
 .card {
@@ -100,7 +122,7 @@ input {
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 10px 12px;
-  min-width: 180px;
+  min-width: 220px;
   font-size: 14px;
 }
 
@@ -119,16 +141,54 @@ button:disabled {
   cursor: default;
 }
 
+.summary-strip {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.summary-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 14px;
+  background: var(--bg);
+  border-radius: 10px;
+  min-width: 120px;
+}
+
+.summary-label {
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+
+.summary-value {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.kpi-row {
+  display: flex;
+  gap: 24px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
 .kpi {
   display: flex;
   gap: 8px;
-  margin-bottom: 8px;
   color: var(--muted);
+  align-items: baseline;
 }
 
 .metric {
   font-size: 24px;
   font-weight: 700;
+  color: var(--text);
 }
 
 table {
@@ -151,13 +211,167 @@ td {
   padding: 8px 6px;
 }
 
+th[title],
+.chart-pair-caption[title],
+.runway-chart-title[title],
+.summary-tile[title],
+.kpi[title] {
+  cursor: help;
+}
+
 .help {
   color: var(--muted);
   font-size: 13px;
 }
 
+.coverage-footer {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.airline-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.airline-name {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.chart-pair {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+  margin-top: 8px;
+}
+
+.chart-pair > * {
+  min-width: 0;
+}
+
+.chart-pair-caption {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 2px;
+}
+
+.runway-chart {
+  margin-top: 10px;
+  width: 100%;
+}
+
+.runway-chart-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 6px;
+}
+
+.runway-chart-empty {
+  font-size: 12px;
+  color: var(--muted);
+  padding: 8px 0;
+}
+
+.runway-chart-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 140px;
+  overflow: auto;
+  width: 100%;
+}
+
+.runway-chart-row {
+  display: grid;
+  grid-template-columns: 2.75rem auto minmax(4rem, 1fr) 1.75rem;
+  gap: 8px 10px;
+  align-items: center;
+  font-size: 12px;
+  margin-bottom: 5px;
+  width: 100%;
+}
+
+.runway-chart-label {
+  font-weight: 600;
+  line-height: 1.35;
+  min-width: 0;
+}
+
+.runway-chart-meta {
+  min-width: 0;
+  max-width: min(15rem, 100%);
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.runway-chart-bar-slot {
+  min-width: 0;
+}
+
+.runway-chart-bar-wrap {
+  width: 100%;
+  height: 8px;
+  background: #eef3ff;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.runway-chart-bar {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 4px;
+  min-width: 2px;
+}
+
+.runway-chart-count {
+  text-align: right;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+th.col-flight,
+td.col-flight {
+  max-width: 15rem;
+  width: 15rem;
+  vertical-align: top;
+}
+
+td.col-flight .airline-cell {
+  flex-wrap: nowrap;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
 @media (max-width: 900px) {
-  .grid {
+  .summary-strip {
+    flex-direction: column;
+  }
+
+  .kpi-row {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .chart-pair {
     grid-template-columns: 1fr;
   }
 }

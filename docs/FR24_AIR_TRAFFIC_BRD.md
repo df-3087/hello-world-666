@@ -6,10 +6,10 @@ This specification lives in-repo for version control and sharing. It covers the 
 
 - [ ] Single flight number input drives all three reporting containers
 - [ ] Container 1 — Flight history: last 10 legs with takeoff/landing times, taxi-in/out, aircraft type, flight duration
-- [ ] Container 2 — Departure airport context: recent departures from origin airport (directional, `dep:ICAO`)
-- [ ] Container 3 — Arrival airport context: recent arrivals at destination airport (directional, `arr:ICAO`)
+- [ ] Container 2 — Departure airport context: recent departures from origin airport (directional, `outbound:ICAO`)
+- [ ] Container 3 — Arrival airport context: recent arrivals at destination airport (directional, `inbound:ICAO`)
 - [ ] Resolve route from flight legs: derive `orig_icao` + `dest_icao` from most recent completed leg
-- [ ] Switch `/api/airport` from `airports=both:ICAO` to directional filters (`dep:` / `arr:`)
+- [ ] Switch `/api/airport` from `airports=both:ICAO` to directional filters (`outbound:` / `inbound:`)
 - [ ] Coverage footers and data-quality labels on all three containers
 
 ---
@@ -196,7 +196,7 @@ Primary design target is **one composite persona** (frequent traveler who is als
 | ID | Requirement |
 |----|-------------|
 | FR-FN-1 | Accept flight number input; **normalize** (strip spaces, upper case; map IATA airline prefix + numeric to FR24 query form). |
-| FR-FN-2 | Fetch the **last 10 completed legs** for the entered flight number via `flight-summary/light`; sort descending by takeoff time. |
+| FR-FN-2 | Fetch the **last 10 completed legs** for the entered flight number via `flight-summary/full`; sort descending by takeoff time. |
 | FR-FN-3 | For each leg show: date, origin, destination, **takeoff time** (UTC + local), **landing time** (UTC + local), aircraft type, registration. |
 | FR-FN-4 | For each leg compute and show **flight duration** (landed − takeoff) where both timestamps exist; show coverage % when unavailable. |
 | FR-FN-5 | For each leg show **taxi-out proxy** (`takeoff − gate_departure`) and **taxi-in proxy** (`gate_arrival − landed`) via historic flight events; show coverage % when gate events are absent. |
@@ -208,7 +208,7 @@ Primary design target is **one composite persona** (frequent traveler who is als
 | ID | Requirement |
 |----|-------------|
 | FR-DC-1 | Resolve **origin airport** (`orig_icao`) from the most recent completed leg in the flight history result. |
-| FR-DC-2 | Fetch recent **departures only** from the origin airport using `airports=dep:ICAO` filter (directional). |
+| FR-DC-2 | Fetch recent **departures only** from the origin airport using `airports=outbound:ICAO` filter (directional). |
 | FR-DC-3 | Show **departures per hour** time series (last 24h or configured window) in airport local timezone. |
 | FR-DC-4 | Show **recent departure rows**: flight, destination, scheduled/actual takeoff time, aircraft type where available. |
 | FR-DC-5 | Show airport name, IATA/ICAO, city, country, and timezone clearly labeled. |
@@ -219,7 +219,7 @@ Primary design target is **one composite persona** (frequent traveler who is als
 | ID | Requirement |
 |----|-------------|
 | FR-AC-1 | Resolve **destination airport** (`dest_icao`) from the most recent completed leg in the flight history result. |
-| FR-AC-2 | Fetch recent **arrivals only** at the destination airport using `airports=arr:ICAO` filter (directional). |
+| FR-AC-2 | Fetch recent **arrivals only** at the destination airport using `airports=inbound:ICAO` filter (directional). |
 | FR-AC-3 | Show **arrivals per hour** time series (last 24h or configured window) in airport local timezone. |
 | FR-AC-4 | Show **recent arrival rows**: flight, origin, actual landing time, aircraft type where available. |
 | FR-AC-5 | Show airport name, IATA/ICAO, city, country, and timezone clearly labeled. |
@@ -248,7 +248,7 @@ Use this table in implementation and UI tooltips.
 
 | Metric | Definition | Primary FR24 source | Key fields | Caveats |
 |--------|------------|---------------------|------------|---------|
-| Departures per hour | Count of departed flights per clock hour in airport local TZ | Flight summary light (`dep:ICAO`) | `datetime_takeoff` | Only counts legs with a confirmed takeoff timestamp. |
+| Departures per hour | Count of departed flights per clock hour in airport local TZ | Flight summary light (`outbound:ICAO`) | `datetime_takeoff` | Only counts legs with a confirmed takeoff timestamp. |
 | Recent departures table | Last N departure rows for this airport | Flight summary light | `flight`, `dest_icao`, `datetime_takeoff`, `type` | Window and row cap apply; older rows may be missing. |
 | Peak departure hour | Hour bucket with most departures in the window | Derived from departures series | Hourly buckets | DST handled only if local TZ is applied. |
 
@@ -256,7 +256,7 @@ Use this table in implementation and UI tooltips.
 
 | Metric | Definition | Primary FR24 source | Key fields | Caveats |
 |--------|------------|---------------------|------------|---------|
-| Arrivals per hour | Count of arrived flights per clock hour in airport local TZ | Flight summary light (`arr:ICAO`) | `datetime_landed` | Only counts legs with a confirmed landing timestamp. |
+| Arrivals per hour | Count of arrived flights per clock hour in airport local TZ | Flight summary light (`inbound:ICAO`) | `datetime_landed` | Only counts legs with a confirmed landing timestamp. |
 | Recent arrivals table | Last N arrival rows for this airport | Flight summary light | `flight`, `orig_icao`, `datetime_landed`, `type` | Window and row cap apply; older rows may be missing. |
 | Peak arrival hour | Hour bucket with most arrivals in the window | Derived from arrivals series | Hourly buckets | DST handled only if local TZ is applied. |
 
@@ -266,11 +266,11 @@ Use this table in implementation and UI tooltips.
 
 | Feature | Endpoint | Notes |
 |---------|----------|--------|
-| Flight history (last 10 legs) | `GET /api/flight-summary/light` with `flights=` | Sort desc, limit 10. Returns `orig_icao`, `dest_icao`, `datetime_takeoff`, `datetime_landed`, `type`, `reg`, `fr24_id`. |
+| Flight history (last 10 legs) | `GET /api/flight-summary/full` with `flights=` | Sort desc, limit 10. Returns `orig_iata`, `dest_iata`, `orig_icao`, `dest_icao`, `datetime_takeoff`, `datetime_landed`, `type`, `reg`, `fr24_id`. |
 | Route resolution | Derived from flight summary result | Use `orig_icao` + `dest_icao` from most recent completed leg. |
 | Taxi-out / taxi-in proxies | `GET /api/historic/flight-events/light` | Batch by `fr24_id`; filter for `gate_departure` and `gate_arrival` event types. Data available from 2022-06-01. |
-| Departure airport context | `GET /api/flight-summary/light` with `airports=dep:ICAO` | Directional filter; returns only departing flights. |
-| Arrival airport context | `GET /api/flight-summary/light` with `airports=arr:ICAO` | Directional filter; returns only arriving flights. |
+| Departure airport context | `GET /api/flight-summary/full` with `airports=outbound:ICAO` | Directional filter; returns only departing flights. |
+| Arrival airport context | `GET /api/flight-summary/full` with `airports=inbound:ICAO` | Directional filter; returns only arriving flights. |
 | Airport metadata (name, TZ, IATA) | `GET /api/static/airports/{icao}/full` | Used to display airport name and convert timestamps to local timezone. |
 | On-demand track | `GET /api/flight-tracks` | Requires `fr24_id`; credit-heavy; on-demand only per explicit user action. |
 
@@ -340,7 +340,7 @@ flowchart TB
     AB[GET_/api/airport_arr]
   end
   subgraph fr24 [FR24_API]
-    FS[flight-summary/light]
+    FS[flight-summary/full]
     FE[historic/flight-events/light]
     AP[static/airports/full]
   end
@@ -359,7 +359,7 @@ flowchart TB
 
 1. `GET /api/flight?flight=KE41` → fetches last 10 legs → returns legs + resolved `orig_icao` + `dest_icao`.
 2. UI fires `GET /api/airport?airport=RKSI&direction=dep` and `GET /api/airport?airport=KJFK&direction=arr` in parallel.
-3. Airport route uses directional `airports=dep:ICAO` or `airports=arr:ICAO` based on `direction` param.
+3. Airport route uses directional `airports=outbound:ICAO` or `airports=inbound:ICAO` based on `direction` param.
 
 ---
 
@@ -385,13 +385,13 @@ flowchart TB
 ### Departure airport context container
 
 - Given a resolved `orig_icao`, the container shows a departures-per-hour chart for the last 24h and a recent departures table.
-- Container uses `airports=dep:ICAO` filter (not `both`); no arrivals appear in this section.
+- Container uses `airports=outbound:ICAO` filter (not `both`); no arrivals appear in this section.
 - Airport name, IATA, city, country, and timezone are displayed.
 
 ### Arrival airport context container
 
 - Given a resolved `dest_icao`, the container shows an arrivals-per-hour chart for the last 24h and a recent arrivals table.
-- Container uses `airports=arr:ICAO` filter (not `both`); no departures appear in this section.
+- Container uses `airports=inbound:ICAO` filter (not `both`); no departures appear in this section.
 - Airport name, IATA, city, country, and timezone are displayed.
 
 ### Global
@@ -422,7 +422,7 @@ flowchart TB
 | Flight number resolves ambiguously (same number, multiple carriers) | Show airline code assumption in container header; allow user to narrow later. |
 | Route resolution fails (no completed legs in window) | Empty state with guidance to try a longer lookback or verify flight number. |
 | Sparse gate events for taxi proxies | Always show coverage % for taxi-in/out columns. |
-| Directional FR24 filter (`dep:` / `arr:`) behaves differently from `both:` | Validate in engineering spike before v1.0 ships; document any behavioral gaps in §17. |
+| Directional FR24 filter (`outbound:` / `inbound:`) behaves differently from `both:` | Validate in engineering spike before v1.0 ships; document any behavioral gaps in §17. |
 
 ---
 
@@ -431,5 +431,5 @@ flowchart TB
 - Public deployment vs private demo (abuse risk).
 - Whether to expose a `lookbackDays` control to the user for flight history (currently env-driven).
 - Whether the airport context window (currently 24h) should be user-selectable or fixed.
-- **Directional airport API filter:** confirm `airports=dep:ICAO` and `airports=arr:ICAO` are supported on the Essential tier and behave as expected vs `both:ICAO`. This is the key engineering decision gating v1.0.
+- **Directional airport API filter:** confirmed that FR24 uses `airports=outbound:ICAO` and `airports=inbound:ICAO` (not `dep:` / `arr:`). Validate behavior vs `both:ICAO` on the Essential tier.
 
